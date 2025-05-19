@@ -20,7 +20,7 @@ async function bootstrap() {
   );
 
   // these configuration is used to validate the swagger apis.
-  const config = new DocumentBuilder() //1
+  const config = new DocumentBuilder()
     .setTitle('Nexsa')
     .setDescription('The Nexsa Api documentation')
     .setVersion('1.0')
@@ -36,8 +36,8 @@ async function bootstrap() {
       'JWT-auth',
     )
     .build();
-  const document = SwaggerModule.createDocument(app, config); //2
-  SwaggerModule.setup('api', app, document); //3
-  await app.listen(process.env.PORT ?? 8090);
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document);
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();

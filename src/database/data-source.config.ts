@@ -1,34 +1,39 @@
 import { ConfigService } from '@nestjs/config';
 import { DataSource, DataSourceOptions } from 'typeorm';
+import { config } from 'dotenv';
+import { join } from 'path';
 
+config();
+
+const dataSourceOptions: DataSourceOptions = {
+  type: 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432', 10),
+  username: process.env.DB_USERNAME || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+  database: process.env.DB_DATABASE || 'nexsa_db',
+  entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
+  migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
+  synchronize: false,
+};
+
+// Export for NestJS application
 export const getDataSourceOptions = (configService: ConfigService): DataSourceOptions => {
   return {
-    type: 'postgres',
+    ...dataSourceOptions,
     host: configService.get<string>('host'),
-    port: configService.get<number>('port') || 8090,
+    port: configService.get<number>('port') || 3000,
     username: configService.get<string>('username'),
     password: configService.get<string>('password'),
     database: configService.get<string>('database'),
-    entities: [__dirname + '/../**/*.entity.{ts,js}'],
-    migrations: [__dirname + '/../database/migrations/*.{ts,js}'],
-    synchronize: false,
+    logging: configService.get('NODE_ENV') === 'development',
   };
 };
 
 export const dataSourceFactory = (configService: ConfigService) => {
-  const dataSourceOptions = getDataSourceOptions(configService);
-  return new DataSource(dataSourceOptions);
+  const options = getDataSourceOptions(configService);
+  return new DataSource(options);
 };
 
-// Create and export the DataSource instance
-export const AppDataSource = new DataSource({
-  type: 'postgres',
-  host: process.env.host,
-  port: parseInt(process.env.port || '5432'),
-  username: process.env.username,
-  password: process.env.password,
-  database: process.env.database,
-  entities: [__dirname + '/../**/*.entity.{ts,js}'],
-  migrations: [__dirname + '/../database/migrations/*.{ts,js}'],
-  synchronize: false,
-});
+// Default export for TypeORM CLI
+export default new DataSource(dataSourceOptions);
