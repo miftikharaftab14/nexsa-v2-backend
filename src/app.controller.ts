@@ -21,14 +21,14 @@ export class AppController {
       type: 'object',
       properties: {
         status: { type: 'string', example: 'ok' },
-        timestamp: { type: 'string', example: '2024-03-19T12:00:00Z' }
-      }
-    }
+        timestamp: { type: 'string', example: '2024-03-19T12:00:00Z' },
+      },
+    },
   })
   health() {
     return {
       status: 'ok',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 }
