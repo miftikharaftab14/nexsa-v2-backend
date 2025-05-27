@@ -29,6 +29,19 @@ CREATE TABLE IF NOT EXISTS public.categories
     CONSTRAINT categories_name_created_by_key UNIQUE (name, created_by)
 );
 
+CREATE TABLE IF NOT EXISTS public.customer_preferences
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+    name character varying(100) NOT NULL,
+    user_id bigint NOT NULL,
+    created_at timestamp without time zone DEFAULT now(),
+    updated_at timestamp without time zone DEFAULT now(),
+    CONSTRAINT customer_preferences_pkey PRIMARY KEY (id),
+    CONSTRAINT customer_preferences_name_user_id_key UNIQUE (name, user_id),
+    CONSTRAINT fk_user FOREIGN KEY (user_id)
+        REFERENCES public.users (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS public.chat_attachment
 (
     id uuid NOT NULL,
@@ -79,6 +92,7 @@ CREATE TABLE IF NOT EXISTS public.contact_invitations
 (
     id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
     contact_id bigint NOT NULL,
+    seller_id bigint NOT NULL,
     invite_token character varying(255) COLLATE pg_catalog."default" NOT NULL,
     method character varying(10) COLLATE pg_catalog."default" NOT NULL,
     invite_sent_at timestamp without time zone NOT NULL,
@@ -104,19 +118,52 @@ CREATE TABLE IF NOT EXISTS public.contacts
     CONSTRAINT contacts_pkey PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS public.otp_verification
-(
-    id bigint NOT NULL DEFAULT nextval('otp_verification_id_seq'::regclass),
-    user_id bigint NOT NULL,
-    otp_code character varying(10) COLLATE pg_catalog."default" NOT NULL,
-    expires_at timestamp without time zone NOT NULL,
-    failed_attempts integer DEFAULT 0,
-    locked boolean DEFAULT false,
-    lock_time timestamp without time zone,
-    verified boolean DEFAULT false,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT otp_verification_pkey PRIMARY KEY (id)
-);
+CREATE TABLE IF NOT EXISTS public.otp_verification (
+        id bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+        user_id bigint,
+        phone_number character varying(20) COLLATE pg_catalog."default" NOT NULL,
+        otp_code character varying(10) COLLATE pg_catalog."default" NOT NULL,
+        purpose character varying(20) COLLATE pg_catalog."default" NOT NULL,
+        status character varying(20) COLLATE pg_catalog."default" NOT NULL DEFAULT 'PENDING',
+        expires_at timestamp without time zone NOT NULL,
+        failed_attempts integer DEFAULT 0,
+        resend_count integer DEFAULT 0,
+        locked boolean DEFAULT false,
+        lock_time timestamp without time zone,
+        verified boolean DEFAULT false,
+        verified_at timestamp without time zone,
+        last_sent_at timestamp without time zone,
+        created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+        updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT otp_verification_pkey PRIMARY KEY (id),
+        CONSTRAINT check_otp_purpose CHECK (purpose IN ('LOGIN', 'SIGNUP', 'PASSWORD_RESET', 'PHONE_VERIFICATION')),
+        CONSTRAINT check_otp_status CHECK (status IN ('PENDING', 'VERIFIED', 'EXPIRED', 'BLOCKED')),
+        CONSTRAINT fk_user FOREIGN KEY (user_id)
+          REFERENCES public.users (id) MATCH SIMPLE
+          ON UPDATE NO ACTION
+          ON DELETE NO ACTION
+      );
+
+      -- Add indexes for better performance
+      CREATE INDEX IF NOT EXISTS idx_otp_phone 
+        ON public.otp_verification(phone_number);
+
+      CREATE INDEX IF NOT EXISTS idx_otp_user 
+        ON public.otp_verification(user_id);
+
+      CREATE INDEX IF NOT EXISTS idx_otp_status 
+        ON public.otp_verification(status) 
+        WHERE status = 'PENDING';
+
+      CREATE INDEX IF NOT EXISTS idx_otp_phone_purpose 
+        ON public.otp_verification(phone_number, purpose) 
+        WHERE status = 'PENDING';
+
+    ALTER TABLE IF EXISTS public.otp_verification
+        ADD CONSTRAINT otp_verification_user_id_fkey FOREIGN KEY (user_id)
+        REFERENCES public.users (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION;
 
 CREATE TABLE IF NOT EXISTS public.product_likes
 (
@@ -167,6 +214,74 @@ CREATE TABLE IF NOT EXISTS public.users
     CONSTRAINT users_email_key UNIQUE (email),
     CONSTRAINT users_phone_number_key UNIQUE (phone_number)
 );
+
+-- Create files table for file versioning and metadata
+CREATE TABLE IF NOT EXISTS public.files
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+    key text COLLATE pg_catalog."default" NOT NULL,
+    url text COLLATE pg_catalog."default" NOT NULL,
+    original_name character varying(255) COLLATE pg_catalog."default" NOT NULL,
+    mime_type character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    size bigint NOT NULL,
+    version_id character varying(100) COLLATE pg_catalog."default",
+    version integer DEFAULT 1,
+    parent_version_id character varying(100) COLLATE pg_catalog."default",
+    user_id bigint,
+    is_deleted boolean DEFAULT false,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT files_pkey PRIMARY KEY (id),
+    CONSTRAINT files_user_id_fkey FOREIGN KEY (user_id)
+        REFERENCES public.users (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE SET NULL
+);
+
+-- Add indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_files_user_id
+    ON public.files(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_files_version_id
+    ON public.files(version_id);
+
+CREATE INDEX IF NOT EXISTS idx_files_parent_version_id
+    ON public.files(parent_version_id);
+
+CREATE INDEX IF NOT EXISTS idx_files_key
+    ON public.files(key);
+
+CREATE TABLE IF NOT EXISTS public.seller_followers (
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+    seller_id bigint NOT NULL,
+    follower_id bigint NOT NULL,
+    status character varying(20) COLLATE pg_catalog."default" DEFAULT 'ACTIVE'::character varying,
+    is_deleted boolean DEFAULT false,
+    deleted_at timestamp without time zone,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT seller_followers_pkey PRIMARY KEY (id),
+    CONSTRAINT seller_followers_seller_follower_unique UNIQUE (seller_id, follower_id),
+    CONSTRAINT seller_followers_seller_id_fkey FOREIGN KEY (seller_id)
+        REFERENCES public.users (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT seller_followers_follower_id_fkey FOREIGN KEY (follower_id)
+        REFERENCES public.users (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT check_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'BLOCKED'))
+);
+
+-- Add indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_seller_followers_seller
+    ON public.seller_followers(seller_id);
+
+CREATE INDEX IF NOT EXISTS idx_seller_followers_follower
+    ON public.seller_followers(follower_id);
+
+CREATE INDEX IF NOT EXISTS idx_seller_followers_status
+    ON public.seller_followers(status) WHERE is_deleted = false;
 
 ALTER TABLE IF EXISTS public.broadcasts
     ADD CONSTRAINT broadcasts_sender_id_fkey FOREIGN KEY (sender_id)
@@ -249,12 +364,6 @@ ALTER TABLE IF EXISTS public.contacts
     ON DELETE NO ACTION;
 
 
-ALTER TABLE IF EXISTS public.otp_verification
-    ADD CONSTRAINT otp_verification_user_id_fkey FOREIGN KEY (user_id)
-    REFERENCES public.users (id) MATCH SIMPLE
-    ON UPDATE NO ACTION
-    ON DELETE NO ACTION;
-
 
 ALTER TABLE IF EXISTS public.product_likes
     ADD CONSTRAINT product_likes_product_id_fkey FOREIGN KEY (product_id)
@@ -290,4 +399,17 @@ ALTER TABLE IF EXISTS public.products
     ON UPDATE NO ACTION
     ON DELETE NO ACTION;
 
-END;
+ALTER TABLE IF EXISTS public.contact_invitations
+    ADD CONSTRAINT check_invitation_status 
+    CHECK (status IN ('PENDING', 'ACCEPTED', 'CANCELLED'));
+
+ALTER TABLE IF EXISTS public.contact_invitations
+    ADD CONSTRAINT unique_invitation_per_contact 
+    UNIQUE (contact_id, status) 
+    WHERE status = 'PENDING';
+
+ ALTER TABLE contacts 
+   ADD CONSTRAINT check_contact_status 
+   CHECK (status IN ('NEW', 'INVITED', 'ACCEPTED', 'REJECTED'));
+
+COMMIT;

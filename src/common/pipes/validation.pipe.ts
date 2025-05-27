@@ -10,9 +10,17 @@ export class CustomValidationPipe implements PipeTransform<unknown> {
       return value;
     }
 
-    const options: ClassTransformOptions = { enableImplicitConversion: true };
+    const options: ClassTransformOptions = {
+      enableImplicitConversion: true,
+      // excludeExtraneousValues: true, // This will exclude properties not defined in the DTO
+    };
+
     const object = plainToClass(metatype as ClassConstructor<object>, value as object, options);
-    const errors = await validate(object);
+    const errors = await validate(object, {
+      skipMissingProperties: true, // This will skip validation for properties not present in the request
+      whitelist: true, // This will strip properties not defined in the DTO
+      forbidNonWhitelisted: true, // Add this to prevent unknown properties
+    });
 
     if (errors.length > 0) {
       // Get the first error message

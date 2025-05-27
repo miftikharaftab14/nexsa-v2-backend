@@ -8,18 +8,26 @@ import { validate } from './common/validation/env.validation';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { typeOrmAsyncConfig } from './database/typeorm.config';
 import { AuthModule } from './auth/auth.module';
+import { CommonModule } from './common/common.module';
+import { ContactsModule } from './contacts/contacts.module';
+import { InvitationsModule } from './invitations/invitations.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      envFilePath: ['.env'],
+      envFilePath: ['.env', '.env.development'],
       isGlobal: true,
       load: [dbConfiguration],
       validate,
     }),
+    CommonModule,
     TypeOrmModule.forRootAsync(typeOrmAsyncConfig),
     UserModule,
     AuthModule,
+    ContactsModule,
+    InvitationsModule,
+    FilesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

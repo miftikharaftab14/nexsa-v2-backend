@@ -1,56 +1,91 @@
-import {
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
-import { Response } from 'express';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, Logger } from '@nestjs/common';
+import { Response, Request } from 'express';
+import { BusinessException } from '../exceptions/business.exception';
 import { ApiResponse } from '../interfaces/api-response.interface';
 
 interface ExceptionResponse {
-  message?: string;
-  error?: string;
+  message: string;
+  error: string;
   details?: Record<string, unknown>;
 }
 
-@Catch()
+interface RequestWithBody extends Request {
+  body: Record<string, unknown>;
+}
+
+@Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
 
-  catch(exception: Error | HttpException, host: ArgumentsHost): void {
+  catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<RequestWithBody>();
+    const status = exception.getStatus();
+    const exceptionResponse = exception.getResponse() as ExceptionResponse;
 
-    let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let errorResponse: ApiResponse<null> = {
-      success: false,
-      message: 'Internal server error',
-      error: {
-        code: 'INTERNAL_SERVER_ERROR',
+    // Log the error with request details
+    this.logger.error(`[${request.method}] ${request.url} - Status: ${status}`, {
+      exception: {
+        name: exception.name,
+        message: exception.message,
+        response: exceptionResponse,
+        stack: exception.stack,
       },
-    };
+      request: {
+        method: request.method,
+        url: request.url,
+        body: request.body,
+      },
+    });
 
-    if (exception instanceof HttpException) {
-      status = exception.getStatus();
-      const exceptionResponse = exception.getResponse() as ExceptionResponse;
+    let errorResponse: ApiResponse<null>;
 
+    if (exception instanceof BusinessException) {
       errorResponse = {
         success: false,
-        message: exceptionResponse.message || exception.message,
+        message: exceptionResponse.message,
+        status,
+        data: null,
         error: {
-          code: exceptionResponse.error || 'UNKNOWN_ERROR',
+          code: exceptionResponse.error,
           details: exceptionResponse.details,
         },
       };
     } else {
-      // Log unexpected errors
-      this.logger.error(`Unexpected error: ${exception.message}`, exception.stack);
-    }
+      // Handle validation errors (BadRequestException)
+      if (status === 400 && Array.isArray(exceptionResponse.message)) {
+        this.logger.warn('Validation Error:', {
+          errors: exceptionResponse.message,
+          request: {
+            body: request.body,
+          },
+        });
 
-    // Log the error response
-    this.logger.error(`Error Response: ${JSON.stringify(errorResponse)}`);
+        errorResponse = {
+          success: false,
+          message: 'Validation failed',
+          status,
+          data: null,
+          error: {
+            code: 'VALIDATION_ERROR',
+            details: {
+              errors: exceptionResponse.message,
+            },
+          },
+        };
+      } else {
+        errorResponse = {
+          success: false,
+          message: exception.message,
+          status,
+          data: null,
+          error: {
+            code: 'INTERNAL_SERVER_ERROR',
+          },
+        };
+      }
+    }
 
     response.status(status).json(errorResponse);
   }

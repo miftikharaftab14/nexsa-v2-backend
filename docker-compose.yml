@@ -4,11 +4,11 @@ services:
   app:
     build:
       context: .
-      target: ${NODE_ENV:-production}
+      target: ${NODE_ENV:-development}
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_ENV=${NODE_ENV:-development}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-nexsa_v2}
       - DB_HOST=db
       - DB_PORT=5432

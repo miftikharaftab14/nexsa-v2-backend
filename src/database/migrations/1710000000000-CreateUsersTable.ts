@@ -14,6 +14,8 @@ export class CreateUsersTable1710000000000 implements MigrationInterface {
         email character varying(255) COLLATE pg_catalog."default",
         phone_number character varying(20) COLLATE pg_catalog."default" NOT NULL,
         role user_role NOT NULL DEFAULT 'CUSTOMER',
+        preferences text[] DEFAULT '{}',
+        link text,
         profile_picture text COLLATE pg_catalog."default",
         about_me text COLLATE pg_catalog."default",
         is_deleted boolean DEFAULT false,

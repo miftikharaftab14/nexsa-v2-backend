@@ -32,7 +32,13 @@ export class User {
   profile_picture: string;
 
   @Column({ type: 'text', nullable: true })
+  link: string;
+
+  @Column({ type: 'text', nullable: true })
   about_me: string;
+
+  @Column({ type: 'text', array: true, default: [] })
+  preferences: string[];
 
   @Column({ default: false })
   is_deleted: boolean;

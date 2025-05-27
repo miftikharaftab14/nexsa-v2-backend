@@ -1,0 +1,18 @@
+export enum OtpPurpose {
+  LOGIN = 'LOGIN',
+  SIGNUP = 'SIGNUP',
+  PASSWORD_RESET = 'PASSWORD_RESET',
+  PHONE_VERIFICATION = 'PHONE_VERIFICATION',
+}
+
+export enum OtpStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  EXPIRED = 'EXPIRED',
+  BLOCKED = 'BLOCKED',
+}
+
+export const OTP_EXPIRY_MINUTES = 1.5; // 1:30 minutes
+export const MAX_FAILED_ATTEMPTS = 5;
+export const MAX_RESEND_ATTEMPTS = 3;
+export const RESEND_COOLDOWN_MINUTES = 1;

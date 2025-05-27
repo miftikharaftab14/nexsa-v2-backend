@@ -1,24 +1,23 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { BigIntSerializerInterceptor } from './common/interceptors/bigint-serializer.interceptor';
+import { CustomValidationPipe } from './common/pipes/validation.pipe';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
 
   // Global exception filter
   app.useGlobalFilters(new HttpExceptionFilter());
 
   // Global validation pipe
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // strips non-declared properties
-      forbidNonWhitelisted: true, // throws if unknown props exist
-      transform: true, // auto-transforms to DTO types
-    }),
-  );
+  app.useGlobalPipes(new CustomValidationPipe());
 
+  app.useGlobalInterceptors(new BigIntSerializerInterceptor());
   // these configuration is used to validate the swagger apis.
   const config = new DocumentBuilder()
     .setTitle('Nexsa')
@@ -38,6 +37,13 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
-  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+
+  const port = process.env.PORT ?? 3000;
+  // await app.listen(port, '192.168.100.113');
+  await app.listen(port, '0.0.0.0');
+  Logger.log(`Application is running on: http://localhost:${port}`);
 }
-bootstrap();
+bootstrap().catch(err => {
+  Logger.error('Error during application bootstrap', err);
+  process.exit(1);
+});

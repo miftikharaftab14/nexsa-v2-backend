@@ -9,17 +9,45 @@ import {
   UseGuards,
   HttpStatus,
   NotFoundException,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
 import { UserService } from '../services/user.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { ApiResponse as CustomApiResponse } from '../../common/interfaces/api-response.interface';
 import { User } from '../entities/user.entity';
+import { Messages } from '../../common/enums/messages.enum';
+import { Descriptions } from '../../common/enums/descriptions.enum';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { FileSize } from 'src/common/constants/file';
+import {
+  _200_user_delete,
+  _200_users,
+  _201_users,
+  _400_users,
+  _401_users,
+  _403_users,
+  _404_users,
+  _200_profile_picture,
+  _400_profile_picture,
+  _404_profile_picture,
+} from '../documentaion/api.response';
 
 @ApiTags('Users')
 @Controller('users')
@@ -30,230 +58,138 @@ export class UserController {
 
   @Post()
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Create a new user' })
-  @ApiResponse({
-    status: HttpStatus.CREATED,
-    description: 'User has been successfully created',
-    schema: {
-      example: {
-        success: true,
-        message: 'User created successfully',
-        data: {
-          id: 1,
-          username: 'john_doe',
-          email: 'john@example.com',
-          phone_number: '+1234567890',
-          role: 'CUSTOMER',
-          profile_picture: null,
-          about_me: null,
-          is_deleted: false,
-          created_at: '2024-03-10T12:00:00Z',
-          updated_at: '2024-03-10T12:00:00Z',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid input data',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - Insufficient permissions',
-  })
+  @ApiOperation({ summary: Descriptions.CREATE_USER_SUMMARY })
+  @ApiResponse(_201_users)
+  @ApiResponse(_400_users)
+  @ApiResponse(_401_users)
+  @ApiResponse(_403_users)
   async create(@Body() createUserDto: CreateUserDto): Promise<CustomApiResponse<User>> {
     const user = await this.userService.create(createUserDto);
     return {
       success: true,
-      message: 'User created successfully',
+      message: Messages.USER_CREATED,
+      status: HttpStatus.CREATED,
       data: user,
+    };
+  }
+
+  @Get(':id/profile-picture')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Update user profile picture' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Profile picture file (image)',
+        },
+        folder: {
+          type: 'string',
+          description: 'Optional folder path where the image should be stored',
+          example: 'profile-pictures',
+        },
+      },
+    },
+  })
+  @ApiResponse(_200_profile_picture)
+  @ApiResponse(_400_profile_picture)
+  @ApiResponse(_404_profile_picture)
+  async updateProfilePicture(@Param('id') id: number): Promise<CustomApiResponse<string | null>> {
+    const result = await this.userService.getProfilePictureUrl(id);
+    return {
+      success: true,
+      message: 'Profile picture updated successfully',
+      status: HttpStatus.OK,
+      data: result,
     };
   }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.SELLER)
-  @ApiOperation({ summary: 'Get all users' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'List of all users',
-    schema: {
-      example: {
-        success: true,
-        message: 'Users retrieved successfully',
-        data: [
-          {
-            id: 1,
-            username: 'john_doe',
-            email: 'john@example.com',
-            phone_number: '+1234567890',
-            role: 'CUSTOMER',
-            profile_picture: null,
-            about_me: null,
-            is_deleted: false,
-            created_at: '2024-03-10T12:00:00Z',
-            updated_at: '2024-03-10T12:00:00Z',
-          },
-        ],
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - Insufficient permissions',
-  })
+  @ApiOperation({ summary: Descriptions.GET_ALL_USERS_SUMMARY })
+  @ApiResponse(_200_users)
+  @ApiResponse(_401_users)
+  @ApiResponse(_403_users)
   async findAll(): Promise<CustomApiResponse<User[]>> {
     const users = await this.userService.findAll();
     return {
       success: true,
-      message: 'Users retrieved successfully',
+      message: Messages.USERS_FETCHED,
+      status: HttpStatus.OK,
       data: users,
     };
   }
 
   @Get(':id')
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Get a user by ID' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'User found',
-    schema: {
-      example: {
-        success: true,
-        message: 'User retrieved successfully',
-        data: {
-          id: 1,
-          username: 'john_doe',
-          email: 'john@example.com',
-          phone_number: '+1234567890',
-          role: 'CUSTOMER',
-          profile_picture: null,
-          about_me: null,
-          is_deleted: false,
-          created_at: '2024-03-10T12:00:00Z',
-          updated_at: '2024-03-10T12:00:00Z',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'User not found',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - Insufficient permissions',
-  })
+  @ApiOperation({ summary: Descriptions.GET_USER_BY_ID_SUMMARY })
+  @ApiResponse(_200_users)
+  @ApiResponse(_404_users)
+  @ApiResponse(_401_users)
+  @ApiResponse(_403_users)
   async findOne(@Param('id') id: string): Promise<CustomApiResponse<User>> {
     const user = await this.userService.findOne(+id);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException(Messages.USER_NOT_FOUND);
     }
     return {
       success: true,
-      message: 'User retrieved successfully',
+      message: Messages.USER_FETCHED,
+      status: HttpStatus.OK,
       data: user,
     };
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Update a user' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'User has been successfully updated',
-    schema: {
-      example: {
-        success: true,
-        message: 'User updated successfully',
-        data: {
-          id: 1,
-          username: 'john_doe',
-          email: 'john@example.com',
-          phone_number: '+1234567890',
-          role: 'CUSTOMER',
-          profile_picture: null,
-          about_me: null,
-          is_deleted: false,
-          created_at: '2024-03-10T12:00:00Z',
-          updated_at: '2024-03-10T12:00:00Z',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'User not found',
-  })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid input data',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - Insufficient permissions',
-  })
+  @ApiOperation({ summary: Descriptions.UPDATE_USER_SUMMARY })
+  @ApiResponse(_200_users)
+  @ApiResponse(_404_users)
+  @ApiResponse(_400_users)
+  @ApiResponse(_401_users)
+  @ApiResponse(_403_users)
+  @UseInterceptors(FileInterceptor('image'))
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: FileSize.PROFILE_IMAGE_SIZE }), // 5MB
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png)$/ }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    file: Express.Multer.File,
   ): Promise<CustomApiResponse<User>> {
-    const user = await this.userService.update(+id, updateUserDto);
+    const user = await this.userService.update(+id, { ...updateUserDto, image: file });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException(Messages.USER_NOT_FOUND);
     }
     return {
       success: true,
-      message: 'User updated successfully',
+      message: Messages.USER_UPDATED,
+      status: HttpStatus.OK,
       data: user,
     };
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Delete a user' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'User has been successfully deleted',
-    schema: {
-      example: {
-        success: true,
-        message: 'User deleted successfully',
-        data: null,
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'User not found',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Forbidden - Insufficient permissions',
-  })
+  @ApiOperation({ summary: Descriptions.DELETE_USER_SUMMARY })
+  @ApiResponse(_200_user_delete)
+  @ApiResponse(_404_users)
+  @ApiResponse(_401_users)
+  @ApiResponse(_403_users)
   async delete(@Param('id') id: string): Promise<CustomApiResponse<null>> {
     await this.userService.delete(+id);
     return {
       success: true,
-      message: 'User deleted successfully',
+      message: Messages.USER_DELETED,
+      status: HttpStatus.OK,
       data: null,
     };
   }

@@ -3,175 +3,95 @@ import { AuthService } from '../services/auth.service';
 import { SignupDto } from '../dto/signup.dto';
 import { LoginDto } from '../dto/login.dto';
 import { VerifyOtpDto } from '../dto/verify-otp.dto';
+import { ResendOtpDto } from '../dto/resend-otp.dto';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiResponse as ApiResponseInterface } from 'src/common/interfaces/api-response.interface';
 import { CustomValidationPipe } from 'src/common/pipes/validation.pipe';
+import { Descriptions } from 'src/common/enums/descriptions.enum';
+import {
+  _200_login,
+  _200_resendOtp,
+  _200_verifyOtp,
+  _201_signup,
+  _400_login,
+  _400_signnup,
+  _400_verifyOtp,
+} from '../documentaion/api.response';
+import { Messages } from 'src/common/enums/messages.enum';
+import { User } from '../../users/entities/user.entity';
 
 @Controller('auth')
-@ApiBearerAuth('JWT-auth')
 @ApiTags('auth')
+@ApiBearerAuth('JWT-auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register new user' })
-  @ApiResponse({
-    status: HttpStatus.CREATED,
-    description: 'User successfully registered',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'User registered successfully' },
-        data: {
-          type: 'object',
-          properties: {
-            id: { type: 'number', example: 1 },
-            username: { type: 'string', example: 'johndoe' },
-            email: { type: 'string', example: 'john@example.com' },
-            phone_number: { type: 'string', example: '+1234567890' },
-            role: { type: 'string', example: 'CUSTOMER' },
-          },
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid input or user already exists',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: false },
-        message: { type: 'string', example: 'Email already exists' },
-        error: {
-          type: 'object',
-          properties: {
-            code: { type: 'string', example: 'EMAIL_ALREADY_EXISTS' },
-            details: {
-              type: 'object',
-              properties: {
-                email: { type: 'string', example: 'john@example.com' },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
+  @ApiOperation({ summary: Descriptions.SIGNUP_SUMMARY })
+  @ApiResponse(_201_signup)
+  @ApiResponse(_400_signnup)
   async signup(
     @Body(new CustomValidationPipe()) signupDto: SignupDto,
-  ): Promise<ApiResponseInterface<any>> {
-    return this.authService.signup(signupDto);
+  ): Promise<ApiResponseInterface<User>> {
+    const user = await this.authService.signup(signupDto);
+    return {
+      success: true,
+      message: Messages.USER_REGISTERED,
+      status: HttpStatus.CREATED,
+      data: user,
+    };
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with phone number' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'OTP sent successfully',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'OTP sent successfully' },
-        data: {
-          type: 'object',
-          properties: {
-            message: { type: 'string', example: 'OTP sent (mocked)' },
-            otp: { type: 'string', example: '123456' },
-          },
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'User not found',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: false },
-        message: { type: 'string', example: 'User not found' },
-        error: {
-          type: 'object',
-          properties: {
-            code: { type: 'string', example: 'USER_NOT_FOUND' },
-            details: {
-              type: 'object',
-              properties: {
-                phone_number: { type: 'string', example: '+1234567890' },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
+  @ApiOperation({ summary: Descriptions.LOGIN_SUMMARY })
+  @ApiResponse(_200_login)
+  @ApiResponse(_400_login)
   async login(
     @Body(new CustomValidationPipe()) loginDto: LoginDto,
-  ): Promise<ApiResponseInterface<any>> {
-    return this.authService.login(loginDto);
+  ): Promise<ApiResponseInterface<{ message: string }>> {
+    const result = await this.authService.login(loginDto);
+    return {
+      success: true,
+      message: Messages.OTP_SENT,
+      status: HttpStatus.OK,
+      data: result,
+    };
   }
 
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify OTP and get access token' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'OTP verified successfully',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'OTP verified successfully' },
-        data: {
-          type: 'object',
-          properties: {
-            accessToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
-            user: {
-              type: 'object',
-              properties: {
-                id: { type: 'number', example: 1 },
-                username: { type: 'string', example: 'johndoe' },
-                email: { type: 'string', example: 'john@example.com' },
-                phone_number: { type: 'string', example: '+1234567890' },
-                role: { type: 'string', example: 'CUSTOMER' },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid OTP',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: false },
-        message: { type: 'string', example: 'Invalid OTP' },
-        error: {
-          type: 'object',
-          properties: {
-            code: { type: 'string', example: 'INVALID_OTP' },
-            details: {
-              type: 'object',
-              properties: {
-                phone_number: { type: 'string', example: '+1234567890' },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
+  @ApiOperation({ summary: Descriptions.VERIFY_OTP_SUMMARY })
+  @ApiResponse(_200_verifyOtp)
+  @ApiResponse(_400_verifyOtp)
   async verifyOtp(
     @Body(new CustomValidationPipe()) verifyOtpDto: VerifyOtpDto,
-  ): Promise<ApiResponseInterface<any>> {
-    return this.authService.verifyOtp(verifyOtpDto);
+  ): Promise<ApiResponseInterface<{ accessToken: string; user: User }>> {
+    const result = await this.authService.verifyOtp(verifyOtpDto);
+    return {
+      success: true,
+      message: Messages.OTP_VERIFIED,
+      status: HttpStatus.OK,
+      data: result,
+    };
+  }
+
+  @Post('resend-otp')
+  @ApiResponse(_200_resendOtp)
+  @HttpCode(HttpStatus.OK)
+  async resendOtp(
+    @Body() resendOtpDto: ResendOtpDto,
+  ): Promise<ApiResponseInterface<{ message: string }>> {
+    const result = await this.authService.resendOtp(
+      resendOtpDto.phone_number,
+      resendOtpDto.purpose,
+    );
+    return {
+      success: true,
+      message: Messages.OTP_SENT,
+      status: HttpStatus.OK,
+      data: result,
+    };
   }
 }
