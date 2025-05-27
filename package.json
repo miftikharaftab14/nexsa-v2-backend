@@ -22,7 +22,6 @@
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm migration:generate src/database/migrations/Name",
     "migration:run": "ts-node ./node_modules/typeorm/cli.js migration:run -d ./src/database/data-source.config.ts",
-    "prepare": "husky",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -74,7 +73,6 @@
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-prettier": "^5.4.0",
     "globals": "^16.0.0",
-    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "lint-staged": "^16.0.0",
     "prettier": "^3.5.3",

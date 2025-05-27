@@ -6,6 +6,7 @@ import { InjectionToken } from '../../common/constants/injection-tokens';
 import { ConfigService } from '@nestjs/config';
 import { LogContexts, LogMessages } from '../../common/enums/logging.enum';
 import { BusinessException } from '../../common/exceptions/business.exception';
+import { FileSize } from 'src/common/constants/file';
 
 @Injectable()
 export class FileService {
@@ -37,19 +38,20 @@ export class FileService {
         url,
         originalName: file?.originalname,
         mimeType: file.mimetype,
-        size: file.size,
+        size: file.size as FileSize.PROFILE_IMAGE_SIZE,
         folder: folder || this.s3Folder,
         // versionId,
         // version: versions.length,
       };
 
       return this.fileRepository.create(fileData);
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(
         `Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new BusinessException(LogMessages.FILE_UPLOAD_FAILED, 'FILE_UPLOAD_FAILED', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       });
     }
   }
@@ -70,7 +72,7 @@ export class FileService {
         url,
         originalName: file?.originalname,
         mimeType: file.mimetype,
-        size: file.size,
+        size: file.size as FileSize.PROFILE_IMAGE_SIZE,
         folder: existingFile.folder,
         versionId,
         version: versions.length,
@@ -78,12 +80,13 @@ export class FileService {
       };
 
       return this.fileRepository.create(fileData);
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(
         `Failed to upload file version: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new BusinessException(LogMessages.FILE_UPLOAD_FAILED, 'FILE_UPLOAD_FAILED', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       });
     }
   }
@@ -95,12 +98,13 @@ export class FileService {
         throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
       }
       return this.s3Service.getPresignedUrl(file.key, expiresIn);
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(
         `Failed to get presigned URL: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       });
     }
   }
@@ -115,12 +119,13 @@ export class FileService {
         where: { key: file.key },
         order: { version: 'DESC' },
       });
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(
         `Failed to get file versions: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       });
     }
   }
@@ -133,12 +138,13 @@ export class FileService {
       }
       await this.s3Service.deleteFile(file.url);
       await this.fileRepository.softDelete(id);
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(
         `Failed to delete file: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new BusinessException(LogMessages.FILE_DELETE_FAILED, 'FILE_DELETE_FAILED', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       });
     }
   }
