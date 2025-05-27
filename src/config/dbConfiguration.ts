@@ -1,8 +1,8 @@
 export default () => ({
-  port: process.env.DB_PORT || 5432,
-  host: process.env.DB_HOST,
-  username: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+  port: process.env.POSTGRES_PORT || 5432,
+  host: process.env.POSTGRES_HOST,
+  username: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
+  database: process.env.POSTGRES_DB,
   secret: process.env.JWT_SECRET,
 });

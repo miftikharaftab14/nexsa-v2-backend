@@ -16,7 +16,7 @@ import { FilesModule } from './files/files.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      envFilePath: ['.env', '.env.development'],
+      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
       isGlobal: true,
       load: [dbConfiguration],
       validate,

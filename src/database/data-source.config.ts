@@ -3,37 +3,40 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 import { config } from 'dotenv';
 import { join } from 'path';
 
-config();
+// Load environment variables from .env.development
+config({ path: '.env.development' });
 
 const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  username: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  database: process.env.DB_NAME || 'nexsa_v2',
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
+  username: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'postgres',
+  database: process.env.POSTGRES_DB || 'nexsa_v2',
   entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
   migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   synchronize: false,
+  logging: process.env.NODE_ENV === 'development',
 };
 
-// Export for NestJS application
+// Export for NestJS application with ConfigService
 export const getDataSourceOptions = (configService: ConfigService): DataSourceOptions => {
   return {
     ...dataSourceOptions,
-    host: configService.get<string>('host'),
-    port: configService.get<number>('port') || 3000,
-    username: configService.get<string>('username'),
-    password: configService.get<string>('password'),
-    database: configService.get<string>('database'),
-    logging: configService.get('NODE_ENV') === 'development',
+    host: configService.get<string>('POSTGRES_HOST'),
+    port: configService.get<number>('POSTGRES_PORT'),
+    username: configService.get<string>('POSTGRES_USER'),
+    password: configService.get<string>('POSTGRES_PASSWORD'),
+    database: configService.get<string>('POSTGRES_DB'),
+    logging: configService.get<string>('NODE_ENV') === 'development',
   };
 };
 
-export const dataSourceFactory = (configService: ConfigService) => {
+// Factory for asynchronous injection
+export const dataSourceFactory = (configService: ConfigService): DataSource => {
   const options = getDataSourceOptions(configService);
   return new DataSource(options);
 };
 
-// Default export for TypeORM CLI
+// Export for CLI usage
 export default new DataSource(dataSourceOptions);

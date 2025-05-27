@@ -1,48 +1,50 @@
 version: '3.8'
 
 services:
-  app:
-    build:
-      context: .
-      target: ${NODE_ENV:-development}
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-nexsa_v2}
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USERNAME=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - DB_DATABASE=${DB_NAME:-nexsa_v2}
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - app-network
-    command: >
-      sh -c "npm run migration:run && if [ \"$NODE_ENV\" = \"development\" ]; then npm run start:dev; else npm run start:prod; fi"
-
   db:
-    image: postgres:15-alpine
+    container_name: postgres_nexsa_db
+    image: postgres:latest
+    restart: always
     ports:
-      - "${DB_PORT:-5432}:5432"
-    environment:
-      - POSTGRES_USER=${DB_USER:-postgres}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
-      - POSTGRES_DB=${DB_NAME:-nexsa_v2}
+      - '${POSTGRES_PORT}:5432'
+    env_file:
+      - .env.development
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+
+  app:
+    build:
+      context: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.development
+    environment:
+      - NODE_ENV=${NODE_ENV}
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+
+  
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin-nexsa
+    restart: always
+    env_file:
+      - .env.development
+    ports:
+      - '${PGADMIN_EXPOSED_PORT}:80'
+    depends_on:
+      - db
+    networks:
+      - app-network
 
 networks:
   app-network:
