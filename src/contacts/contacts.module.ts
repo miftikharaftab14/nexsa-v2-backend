@@ -10,6 +10,6 @@ import { InvitationsModule } from 'src/invitations/invitations.module';
   imports: [TypeOrmModule.forFeature([Contact]), InvitationsModule],
   controllers: [ContactController],
   providers: [ContactService, ContactRepository],
-  exports: [ContactService],
+  exports: [ContactService, ContactRepository],
 })
 export class ContactsModule {}

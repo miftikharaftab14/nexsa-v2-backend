@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { IInvitationStrategy } from '../interfaces/invitation-strategy.interface';
 import { Contact } from '../../contacts/entities/contact.entity';
 import { ConfigService } from '@nestjs/config';
@@ -6,9 +6,11 @@ import { IMessagingService } from 'src/common/interfaces/messaging-service.inter
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { BusinessException } from 'src/common/exceptions/business.exception';
 import { InvitationMethod } from 'src/common/enums/contact-invitation.enum';
+import { LogContexts } from 'src/common/enums/logging.enum';
 
 @Injectable()
 export class SMSInvitationStrategy implements IInvitationStrategy {
+  private readonly logger = new Logger(LogContexts.SMSINVITAIONSTRATEGY);
   constructor(
     @Inject(InjectionToken.MESSAGING_SERVICE)
     private readonly messagingService: IMessagingService,
@@ -26,22 +28,22 @@ export class SMSInvitationStrategy implements IInvitationStrategy {
       }
       // 2. Generate message
       const message = this.getInvitationMessage(contact, inviteToken);
-
       // 3. Send via messaging service (TwilioService)
       await this.messagingService.sendMessage(contact.phone_number, message);
     } catch (error) {
       // Handle specific errors
-      if (error instanceof BusinessException) {
-        throw error;
-      }
-      throw new BusinessException('Failed to send SMS invitation', 'FAILED_TO_SEND_SMS');
+      this.logger.error('Failed to send SMS invitation', error);
+      throw new BusinessException(
+        error instanceof Error ? error.message : 'Failed to send SMS invitation',
+        'FAILED_TO_SEND_SMS',
+      );
     }
   }
 
   getInvitationMessage(contact: Contact, inviteToken: string): string {
     const appUrl = this.configService.get<string>('APP_URL');
     const deepLink = `${appUrl}/${inviteToken}`;
-    return `You've been invited to connect with ${contact.seller.username}. Click here to accept: ${deepLink}`;
+    return `You've been invited to connect with ${contact?.seller?.username}. Click here to accept: ${deepLink}`;
   }
   // Add method to check if strategy is applicable
   canHandle(contact: Contact): boolean {

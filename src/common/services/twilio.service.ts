@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as twilio from 'twilio';
+import { Twilio } from 'twilio';
 import { IOtpService, OtpServiceResponse } from '../interfaces/otp-service.interface';
 import { OtpVerification } from '../entities/otp-verification.entity';
 import {
@@ -20,7 +20,8 @@ import { IMessagingService } from '../interfaces/messaging-service.interface';
 
 @Injectable()
 export class TwilioService implements IOtpService, IMessagingService {
-  private readonly client: twilio.Twilio;
+  private readonly client: Twilio;
+  private serviceId: string;
   private readonly fromNumber: string;
   private readonly logger = new Logger(TwilioService.name);
 
@@ -31,6 +32,12 @@ export class TwilioService implements IOtpService, IMessagingService {
   ) {
     const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
     const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
+    const serviceId = this.configService.get<string>('TWILIO_SERVICE_ID');
+    if (!serviceId) {
+      this.logger.error('TWILIO_SERVICE_ID is missing in environment variables');
+      throw new BusinessException('TWILIO_SERVICE_ID is required', 'TWILIO_CONFIG_MISSING');
+    }
+    this.serviceId = serviceId;
     this.fromNumber = this.configService.get<string>('TWILIO_PHONE_NUMBER') || '';
 
     if (!accountSid || !authToken || !this.fromNumber) {
@@ -38,7 +45,7 @@ export class TwilioService implements IOtpService, IMessagingService {
       throw new BusinessException(LogMessages.TWILIO_CONFIG_MISSING, 'TWILIO_CONFIG_MISSING');
     }
 
-    this.client = twilio(accountSid, authToken);
+    this.client = new Twilio(accountSid, authToken);
     this.logger.log(LogMessages.TWILIO_SERVICE_INITIALIZED);
   }
 
@@ -125,6 +132,9 @@ export class TwilioService implements IOtpService, IMessagingService {
         from: this.fromNumber,
         to: phoneNumber,
       });
+      // await this.client.verify.v2
+      //   .services(this.serviceId)
+      //   .verifications.create({ to: phoneNumber, channel: 'sms' });
 
       this.logger.log(`OTP sent successfully to phone: ${phoneNumber}`);
       return {
@@ -137,7 +147,10 @@ export class TwilioService implements IOtpService, IMessagingService {
         `Failed to send OTP to phone: ${phoneNumber}. Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         error instanceof Error ? error.stack : undefined,
       );
-      throw error;
+      throw new BusinessException(
+        error instanceof Error ? error.message : 'Unknown error',
+        'TWILIO_SEND_OTP_FAILED',
+      );
     }
   }
 
@@ -203,7 +216,10 @@ export class TwilioService implements IOtpService, IMessagingService {
         `Failed to verify OTP for phone: ${phoneNumber}. Error: ${error instanceof Error ? error.message : LogMessages.UNKNOWN_ERROR}`,
         error instanceof Error ? error.stack : undefined,
       );
-      throw error;
+      throw new BusinessException(
+        error instanceof Error ? error.message : 'Unknown error',
+        'TWILIO_VERIFY_OTP_FAILED',
+      );
     }
   }
 
@@ -255,7 +271,10 @@ export class TwilioService implements IOtpService, IMessagingService {
         `Failed to resend OTP to phone: ${phoneNumber}. Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         error instanceof Error ? error.stack : undefined,
       );
-      throw error;
+      throw new BusinessException(
+        error instanceof Error ? error.message : 'Unknown error',
+        'TWILIO_RESEND_OTP_FAILED',
+      );
     }
   }
 

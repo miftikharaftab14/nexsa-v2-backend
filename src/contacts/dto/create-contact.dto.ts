@@ -14,17 +14,12 @@ export class CreateContactDto {
   })
   @IsNumber()
   @Type(() => Number)
-  // @Transform(({ value }) => {
-  //   if (typeof value === 'string') {
-  //     return BigInt(value);
-  //   }
-  //   // If it's already a number, convert to BigInt
-  //   if (typeof value === 'number') {
-  //     return BigInt(value);
-  //   }
-  //   return BigInt(value);
-  // })
   seller_id: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  @IsOptional()
+  invited_user_id?: number;
 
   @ApiProperty({
     description: Descriptions.CONTACT_FULL_NAME_DESC,

@@ -7,5 +7,6 @@ export enum InjectionToken {
   FILE_SERVICE = 'FILE_SERVICE',
   INVITATION_STRATEGIES = 'INVITATION_STRATEGIES',
   EMAIL_SERVICE = 'EMAIL_SERVICE',
+  CONTACT_SERVICE = 'CONTACT_SERVICE',
   // Add other injection tokens here as needed
 }

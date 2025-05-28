@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsEnum, Allow } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Examples } from 'src/common/enums/examples.enum';
 import { Descriptions } from 'src/common/enums/descriptions.enum';
@@ -26,4 +26,12 @@ export class LoginDto {
   @IsNotEmpty()
   @IsEnum(UserRole)
   role: UserRole;
+
+  @ApiProperty({
+    description: 'Temporary key from frontend for deep linking',
+    required: false,
+    example: 'some-temporary-token',
+  })
+  @Allow()
+  deepLinktoken?: string;
 }

@@ -105,6 +105,9 @@ export enum LogMessages {
   INVITATION_FETCH_ATTEMPT = 'Attempting to fetch invitation with identifier: %s',
   INVITATION_FETCH_SUCCESS = 'Invitation fetched successfully with identifier: %s',
   INVITATION_FETCH_FAILED = 'Failed to fetch invitation: %s',
+  INVITATION_UPDATE_FAILED = 'Failed to update invitation: %s',
+  INVITATION_UPDATE_SUCCESS = 'Invitation updated successfully with ID: %s',
+  INVITATION_UPDATE_ATTEMPT = 'Attempting to update invitation with ID: %s',
 
   FILE_UPLOAD_FAILED = 'Failed to upload file',
   FILE_NOT_FOUND = 'File not found',
@@ -127,4 +130,5 @@ export enum LogContexts {
   CONTACT_INVITATION = 'CONTACT_INVITATION',
   FILE = 'File',
   EMAIL = 'EMAIL',
+  SMSINVITAIONSTRATEGY = 'SMSInvitationStrategy',
 }

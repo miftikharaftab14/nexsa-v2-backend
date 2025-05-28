@@ -13,6 +13,9 @@ import { TwilioService } from '../common/services/twilio.service';
 import { InjectionToken } from '../common/constants/injection-tokens';
 import { User } from '../users/entities/user.entity';
 import { OtpVerification } from '../common/entities/otp-verification.entity';
+import { InvitationsModule } from 'src/invitations/invitations.module';
+import { ContactService } from 'src/contacts/services/contact.service';
+import { ContactsModule } from 'src/contacts/contacts.module';
 
 @Module({
   imports: [
@@ -27,6 +30,8 @@ import { OtpVerification } from '../common/entities/otp-verification.entity';
       inject: [ConfigService],
     }),
     UserModule,
+    InvitationsModule,
+    ContactsModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -39,7 +44,11 @@ import { OtpVerification } from '../common/entities/otp-verification.entity';
       provide: InjectionToken.OTP_SERVICE,
       useClass: TwilioService,
     },
+    {
+      provide: InjectionToken.CONTACT_SERVICE,
+      useClass: ContactService,
+    },
   ],
-  exports: [RolesGuard, AuthService, TwilioService],
+  exports: [RolesGuard, AuthService, TwilioService, InjectionToken.CONTACT_SERVICE],
 })
 export class AuthModule {}

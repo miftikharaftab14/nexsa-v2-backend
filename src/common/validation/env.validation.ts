@@ -1,9 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { IsEnum, IsNumber, IsString, validateSync } from 'class-validator';
 
-
 class EnvironmentVariables {
-
   @IsNumber()
   POSTGRES_PORT: number;
 

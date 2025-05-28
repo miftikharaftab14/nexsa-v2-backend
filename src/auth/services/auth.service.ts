@@ -11,6 +11,11 @@ import { IOtpService } from 'src/common/interfaces/otp-service.interface';
 import { InjectionToken } from '../../common/constants/injection-tokens';
 import { LogMessages, LogContexts } from 'src/common/enums/logging.enum';
 import { OtpPurpose } from '../../common/enums/otp.enum';
+import { IInvitationService } from 'src/invitations/interfaces/contact-invitation.interface';
+import { InvitationStatus } from 'src/common/enums/contact-invitation.enum';
+import { UserRole } from 'src/common/enums/user-role.enum';
+import { IContactUpdate } from 'src/contacts/interfaces/IContactUpdate.interface';
+import { ContactStatus } from 'src/common/enums/contact-status.enum';
 
 @Injectable()
 export class AuthService {
@@ -20,12 +25,21 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     @Inject(InjectionToken.OTP_SERVICE) private readonly otpService: IOtpService,
+    @Inject(InjectionToken.INVITATION_SERVICE)
+    private readonly invitaionService: IInvitationService,
+    @Inject(InjectionToken.CONTACT_SERVICE)
+    private readonly contactService: IContactUpdate,
   ) {}
 
   async signup(dto: SignupDto): Promise<User> {
     try {
       this.logger.debug(LogMessages.AUTH_SIGNUP_ATTEMPT, dto.phone_number);
-
+      if (dto.role === UserRole.CUSTOMER) {
+        this.logger.warn(Messages.FORBIDDEN, `FORBIDDEN - ${dto.email}`);
+        throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+          role: 'Customer not allowed to signup',
+        });
+      }
       // Check if email exists
       if (dto.email) {
         const existingUserWithEmail = await this.userService.findByEmail(dto.email);
@@ -36,7 +50,7 @@ export class AuthService {
           });
         }
       }
-
+      // Check if phone number exists
       const existingUserWithPhone = await this.userService.findByPhone(dto.phone_number);
       if (existingUserWithPhone) {
         this.logger.warn(
@@ -69,13 +83,75 @@ export class AuthService {
   async login(dto: LoginDto): Promise<{ message: string }> {
     try {
       this.logger.debug(LogMessages.AUTH_LOGIN_ATTEMPT, dto.phone_number);
+      let user = await this.userService.findByPhone(dto.phone_number);
+      //check if user is getting loged in with a deep link token
+      if (dto.deepLinktoken) {
+        const invitaion = await this.invitaionService.getInvitationByToken(dto.deepLinktoken);
+        if (!invitaion) {
+          this.logger.warn(
+            LogMessages.AUTH_LOGIN_FAILED,
+            `Invitation not found - ${dto.deepLinktoken}`,
+          );
+          throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITATION_NOT_FOUND', {
+            deepLinktoken: dto.deepLinktoken,
+          });
+        }
+        //if invitaion cancelled just tell the user that invitaion got cancelled
+        if (invitaion.status === InvitationStatus.CANCELLED) {
+          this.logger.warn(
+            LogMessages.AUTH_LOGIN_FAILED,
+            `Invitation Cancelled - ${dto.deepLinktoken}`,
+          );
+          throw new BusinessException(Messages.INVITATION_CANCELLED, 'INVITATION_CANCELLED', {
+            deepLinktoken: dto.deepLinktoken,
+          });
+        }
 
-      const user = await this.userService.findByPhone(dto.phone_number);
-      if (!user) {
-        this.logger.warn(LogMessages.AUTH_LOGIN_FAILED, `User not found - ${dto.phone_number}`);
-        throw new BusinessException(Messages.USER_NOT_FOUND, 'USER_NOT_FOUND', {
-          phone_number: dto.phone_number,
+        //same number should be use for login if invitation is present
+        if (invitaion.contact.phone_number && invitaion.contact.phone_number !== dto.phone_number) {
+          this.logger.warn(
+            LogMessages.AUTH_LOGIN_FAILED,
+            `Phone number mismatch - Invitation phone: ${invitaion.contact.phone_number}, Attempted phone: ${dto.phone_number}`,
+          );
+          throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+            message: `Invitation phone number ${invitaion.contact.phone_number} does not match attempted phone number ${dto.phone_number}`,
+          });
+        }
+
+        if (!user) {
+          // If user does not exist, create a new user with the invitation details
+          user = await this.userService.create({
+            phone_number: dto.phone_number,
+            role: UserRole.CUSTOMER,
+          });
+          this.logger.log(
+            LogMessages.AUTH_LOGIN_SUCCESS,
+            `New user created - ${user.phone_number}`,
+          );
+        }
+        //update the invitation status to ACCEPTED
+        await this.invitaionService.updateInvitationStatusByToken(
+          dto.deepLinktoken,
+          InvitationStatus.ACCEPTED,
+        );
+        await this.contactService.update(Number(invitaion.contact_id), {
+          invited_user_id: Number(user.id),
+          status: ContactStatus.ACCEPTED,
         });
+      }
+
+      if (!user) {
+        this.logger.warn(
+          LogMessages.AUTH_LOGIN_FAILED,
+          `${Messages.USER_NOT_INVITED} - ${dto.phone_number}`,
+        );
+        throw new BusinessException(
+          dto.role === UserRole.CUSTOMER ? Messages.USER_NOT_INVITED : Messages.USER_NOT_FOUND,
+          'USER_NOT_FOUND',
+          {
+            message: `${Messages.USER_NOT_INVITED} - ${dto.phone_number}`,
+          },
+        );
       }
 
       // Verify user role matches the login attempt
@@ -140,7 +216,7 @@ export class AuthService {
           `Invalid OTP for phone: ${dto.phone_number}`,
         );
         throw new BusinessException(Messages.INVALID_OTP, 'INVALID_OTP', {
-          phone_number: dto.phone_number,
+          message: `Invalid OTP for phone: ${dto.phone_number}`,
         });
       }
 

@@ -4,7 +4,7 @@ import { createTransport, Transporter } from 'nodemailer';
 import { IEmailService } from '../interfaces/email-service.interface';
 import { LogContexts } from '../enums/logging.enum';
 import { BusinessException } from '../exceptions/business.exception';
-import SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { getEmailConfig } from './email.config';
 
 @Injectable()
 export class EmailService implements IEmailService {
@@ -12,22 +12,8 @@ export class EmailService implements IEmailService {
   private readonly transporter: Transporter;
 
   constructor(private readonly configService: ConfigService) {
-    this.transporter = createTransport({
-      type: this.configService.get<string>('EMAIL_TYPE'),
-      host: this.configService.get<string>('EMAIL_HOST'),
-      secure: this.configService.get<string>('EMAIL_SECURE') || true,
-      port: this.configService.get<number>('EMAIL_PORT') || 0,
-      service: 'Mailgun',
-      tls: {
-        minVersion: 'TLSv1.2',
-        rejectUnauthorized: this.configService.get<string>('EMAIL_TLS_REJECT_UNAUTHORIZED') || true,
-      },
-      auth: {
-        user: this.configService.get<string>('EMAIL_USER'),
-        pass: this.configService.get<string>('EMAIL_PASS'),
-      },
-    } as SMTPTransport.Options);
-    // this.transporter = nodemailer.createTransport(mailGun(auth));
+    this.transporter = createTransport(getEmailConfig(this.configService));
+    this.logger.log('Email transporter initialized', getEmailConfig(this.configService));
   }
 
   async sendEmail(to: string, subject: string, html: string): Promise<void> {

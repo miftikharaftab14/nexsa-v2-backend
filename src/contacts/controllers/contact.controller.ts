@@ -87,8 +87,6 @@ export class ContactController {
     @Param('id') id: number,
     @Body(new CustomValidationPipe()) updateContactDto: UpdateContactDto,
   ) {
-    console.log({ updateContactDto });
-
     const contact = await this.contactService.update(id, updateContactDto);
     return {
       success: true,

@@ -2,6 +2,7 @@ export enum Messages {
   // Auth Messages
   USER_REGISTERED = 'User registered successfully',
   USER_NOT_FOUND = 'User not found',
+  USER_NOT_INVITED = 'You are not invited by any seller',
   LOGIN_FAILED = 'Login failed',
   OTP_SENT = 'OTP sent successfully',
   OTP_VERIFIED = 'OTP verified successfully',
@@ -50,7 +51,7 @@ export enum Messages {
 
   //Contact Invitaion
   INVITATION_CREATED = 'Invitation created successfully',
-  INVITATION_CANCELLED = 'Invitation cancelled successfully',
+  INVITATION_CANCELLED = 'Invitation cancelled by seller',
   INVITATION_ACCEPTED = 'Invitation accepted successfully',
   INVITATION_NOT_FOUND = 'Invitation not found',
   INVITATION_ALREADY_PROCESSED = 'Invitation has already been processed',
@@ -59,7 +60,8 @@ export enum Messages {
   INVITATION_ACCEPTANCE_FAILED = 'Failed to accept invitation',
   INVITATION_FETCHED = 'Invitation fetched successfully',
   INVITATIONS_FETCHED = 'Invitations fetched successfully',
-
+  INVITATION_UPDATE_FAILED = 'Failed to update invitation',
+  INVITATION_UPDATE_SUCCESS = 'Invitation updated successfully',
   // Profile Picture Messages
   PROFILE_PICTURE_UPDATED = 'Profile picture updated successfully',
   INVALID_FILE_TYPE = 'Invalid file type. Only jpg, jpeg, and png files are allowed.',

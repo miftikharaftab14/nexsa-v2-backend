@@ -13,9 +13,10 @@ import { ContactStatus } from 'src/common/enums/contact-status.enum';
 import { IInvitationService } from 'src/invitations/interfaces/contact-invitation.interface';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { DataSource } from 'typeorm';
+import { IContactUpdate } from '../interfaces/IContactUpdate.interface';
 
 @Injectable()
-export class ContactService {
+export class ContactService implements IContactUpdate {
   private readonly logger = new Logger(LogContexts.CONTACT);
 
   constructor(
@@ -36,7 +37,12 @@ export class ContactService {
         seller_id: BigInt(createContactDto.seller_id), // Convert to BigInt
       };
 
-      const contact = await this.contactRepo.create(contactData);
+      const contact = await this.contactRepo.create({
+        ...contactData,
+        invited_user_id: contactData.invited_user_id
+          ? BigInt(contactData.invited_user_id)
+          : undefined,
+      });
       this.logger.log(LogMessages.CONTACT_CREATE_SUCCESS, contact.id);
 
       return {
@@ -46,8 +52,13 @@ export class ContactService {
         data: contact,
       };
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.CONTACT_CREATE_FAILED, error);
-      throw new BusinessException(Messages.CONTACT_CREATION_FAILED, 'CONTACT_CREATION_FAILED');
+      throw new BusinessException(Messages.CONTACT_CREATION_FAILED, 'CONTACT_CREATION_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -63,8 +74,13 @@ export class ContactService {
         data: contacts,
       };
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.CONTACT_FETCH_FAILED, error);
-      throw new BusinessException(Messages.CONTACT_FETCH_FAILED, 'CONTACT_FETCH_FAILED');
+      throw new BusinessException(Messages.CONTACT_FETCH_FAILED, 'CONTACT_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -83,8 +99,13 @@ export class ContactService {
         data: contact,
       };
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.CONTACT_FETCH_FAILED, error);
-      throw error;
+      throw new BusinessException(Messages.CONTACT_FETCH_FAILED, 'CONTACT_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -114,7 +135,16 @@ export class ContactService {
       }
       const updatedContact = await this.contactRepo.update(id, {
         ...updateContactDto,
+        ...(updateContactDto.status && {
+          status:
+            updateContactDto.status === ContactStatus.CANCELLED
+              ? ContactStatus.NEW
+              : updateContactDto.status,
+        }),
         seller_id: updateContactDto.seller_id ? BigInt(updateContactDto.seller_id) : undefined,
+        invited_user_id: updateContactDto.invited_user_id
+          ? BigInt(updateContactDto.invited_user_id)
+          : undefined,
       });
       if (!updatedContact) {
         throw new BusinessException(Messages.CONTACT_UPDATE_FAILED, 'CONTACT_UPDATE_FAILED');
@@ -130,7 +160,12 @@ export class ContactService {
     } catch (error) {
       await queryRunner.rollbackTransaction();
       this.logger.error(LogMessages.CONTACT_UPDATE_FAILED, error);
-      throw error;
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      throw new BusinessException(Messages.CONTACT_UPDATE_FAILED, 'CONTACT_UPDATE_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     } finally {
       await queryRunner.release();
     }
@@ -153,7 +188,12 @@ export class ContactService {
       };
     } catch (error) {
       this.logger.error(LogMessages.CONTACT_DELETE_FAILED, error);
-      throw error;
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      throw new BusinessException(Messages.CONTACT_DELETE_FAILED, 'CONTACT_DELETE_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
   async findBySellerId(sellerId: number): Promise<ApiResponse<Contact[]>> {
@@ -169,7 +209,12 @@ export class ContactService {
       };
     } catch (error) {
       this.logger.error(LogMessages.CONTACT_FETCH_FAILED, error);
-      throw new BusinessException(Messages.CONTACT_FETCH_FAILED, 'CONTACT_FETCH_FAILED');
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      throw new BusinessException(Messages.CONTACT_FETCH_FAILED, 'CONTACT_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 }

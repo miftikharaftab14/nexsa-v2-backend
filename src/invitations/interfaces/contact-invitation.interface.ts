@@ -1,5 +1,6 @@
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { Invitation } from '../entities/invitation.entity';
+import { InvitationStatus } from 'src/common/enums/contact-invitation.enum';
 
 export interface IInvitationService {
   createInvitation(contact: Contact): Promise<Invitation>;
@@ -8,4 +9,5 @@ export interface IInvitationService {
   getInvitationByToken(token: string): Promise<Invitation>;
   getInvitationById(id: number): Promise<Invitation>;
   getInvitationsByContactId(contactId: number): Promise<Invitation[]>;
+  updateInvitationStatusByToken(token: string, status: InvitationStatus): Promise<Invitation>;
 }

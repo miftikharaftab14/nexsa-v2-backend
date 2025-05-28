@@ -40,6 +40,6 @@ import { ConfigModule } from '@nestjs/config';
     SMSInvitationStrategy,
     EmailInvitationStrategy,
   ],
-  exports: [InjectionToken.INVITATION_SERVICE],
+  exports: [InjectionToken.INVITATION_SERVICE, InvitationService],
 })
 export class InvitationsModule {}

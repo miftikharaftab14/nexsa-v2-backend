@@ -68,20 +68,10 @@ export class InvitationService implements IInvitationService {
 
       // 3. Send invitation using selected strategy
       await strategy.sendInvitation(contact, inviteToken);
-      // if (contact.phone_number) {
-      //   await this.messagingService.sendMessage(
-      //     contact.phone_number,
-      //     `You've been invited to connect with ${contact?.seller?.username}. Click here to accept: ${deepLink}`,
-      //   );
-      // }
-      // if (contact.email && !contact.phone_number) {
-      //   // await this.messagingService.sendEmail()
-      //   this.logger.log('EMAIL_INVITATION', invitation.id);
-      // }
       const invitation = this.invitationRepo.create({
         contact_id: contact.id,
         invite_token: inviteToken,
-        method: InvitationMethod.SMS,
+        method: strategy.getStrategyType(),
         invite_sent_at: new Date(),
         status: InvitationStatus.PENDING,
         seller_id: contact.seller_id,
@@ -95,6 +85,9 @@ export class InvitationService implements IInvitationService {
       );
       return invitation;
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.INVITATION_CREATE_FAILED, error);
       throw new BusinessException(
         Messages.INVITATION_CREATION_FAILED,
@@ -108,8 +101,13 @@ export class InvitationService implements IInvitationService {
       this.logger.debug(LogMessages.INVITATION_CANCEL_ATTEMPT, contactId);
 
       const invitation = await this.invitationRepo.findOne({
-        where: { contact_id: BigInt(contactId) },
+        where: {
+          contact_id: BigInt(contactId),
+          invite_cancelled_at: undefined,
+          status: InvitationStatus.PENDING,
+        },
         relations: ['contact'],
+        order: { created_at: 'DESC' },
       });
 
       if (!invitation) {
@@ -136,8 +134,17 @@ export class InvitationService implements IInvitationService {
       this.logger.log('INVITATION_CANCEL_SUCCESS', logTest);
       this.logger.log(LogMessages.INVITATION_CANCEL_SUCCESS, contactId);
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.INVITATION_CANCEL_FAILED, error);
-      throw error;
+      throw new BusinessException(
+        LogMessages.INVITATION_CANCEL_FAILED,
+        'INVITATION_CANCEL_FAILED',
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      );
     }
   }
 
@@ -173,8 +180,17 @@ export class InvitationService implements IInvitationService {
 
       this.logger.log(LogMessages.INVITATION_ACCEPT_SUCCESS, token);
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.INVITATION_ACCEPT_FAILED, error);
-      throw error;
+      throw new BusinessException(
+        LogMessages.INVITATION_ACCEPT_FAILED,
+        'INVITATION_ACCEPT_FAILED',
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      );
     }
   }
   async getInvitationByToken(token: string): Promise<Invitation> {
@@ -193,8 +209,13 @@ export class InvitationService implements IInvitationService {
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, token);
       return invitation;
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
-      throw error;
+      throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -214,8 +235,13 @@ export class InvitationService implements IInvitationService {
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, id);
       return invitation;
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
-      throw error;
+      throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -232,8 +258,54 @@ export class InvitationService implements IInvitationService {
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, contactId);
       return invitations;
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
-      throw error;
+      throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+  async updateInvitationStatusByToken(
+    token: string,
+    status: InvitationStatus,
+  ): Promise<Invitation> {
+    try {
+      this.logger.debug(LogMessages.INVITATION_UPDATE_ATTEMPT, token);
+
+      const invitation = await this.invitationRepo.findOne({
+        where: { invite_token: token },
+      });
+
+      if (!invitation) {
+        throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITATION_NOT_FOUND');
+      }
+
+      invitation.status = status;
+      if (status === InvitationStatus.ACCEPTED) {
+        invitation.invite_accepted_at = new Date();
+      } else if (status === InvitationStatus.REJECTED) {
+        invitation.invite_cancelled_at = new Date();
+      }
+      // Add more status-specific logic if needed
+
+      await this.invitationRepo.save(invitation);
+
+      this.logger.log(LogMessages.INVITATION_UPDATE_SUCCESS, token);
+      return invitation;
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(
+        LogMessages.INVITATION_UPDATE_FAILED,
+        error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new BusinessException(Messages.INVITATION_UPDATE_FAILED, 'INVITATION_UPDATE_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 }
