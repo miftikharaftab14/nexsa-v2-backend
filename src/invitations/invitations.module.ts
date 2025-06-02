@@ -4,13 +4,13 @@ import { InvitationController } from './controllers/invitation.controller';
 import { InvitationService } from './services/invitation.service';
 import { Invitation } from './entities/invitation.entity';
 import { Contact } from '../contacts/entities/contact.entity';
-import { TwilioService } from 'src/common/services/twilio.service';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { OtpVerification } from 'src/common/entities/otp-verification.entity';
 import { SMSInvitationStrategy } from './strategies/sms-invitation.strategy';
 import { EmailInvitationStrategy } from './strategies/ email-invitation.strategy';
 import { EmailModule } from 'src/common/modules/email.module';
 import { ConfigModule } from '@nestjs/config';
+import { TwilioMessagingService } from 'src/common/services/twilio-messaging.service';
 
 @Module({
   imports: [
@@ -27,7 +27,7 @@ import { ConfigModule } from '@nestjs/config';
     InvitationService,
     {
       provide: 'IMessagingService',
-      useClass: TwilioService,
+      useClass: TwilioMessagingService,
     },
     {
       provide: InjectionToken.INVITATION_STRATEGIES,
@@ -42,4 +42,4 @@ import { ConfigModule } from '@nestjs/config';
   ],
   exports: [InjectionToken.INVITATION_SERVICE, InvitationService],
 })
-export class InvitationsModule {}
+export class InvitationsModule { }

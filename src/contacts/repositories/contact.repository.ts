@@ -25,4 +25,11 @@ export class ContactRepository extends BaseRepository<Contact> {
       order: { created_at: 'DESC' },
     });
   }
+
+  async findById(contactId: number): Promise<Contact | null> {
+    return this.repository.findOne({
+      where: { id: BigInt(contactId) },
+      relations: ['seller', 'invited_user'],
+    });
+  }
 }

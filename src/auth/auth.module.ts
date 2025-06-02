@@ -16,6 +16,7 @@ import { OtpVerification } from '../common/entities/otp-verification.entity';
 import { InvitationsModule } from 'src/invitations/invitations.module';
 import { ContactService } from 'src/contacts/services/contact.service';
 import { ContactsModule } from 'src/contacts/contacts.module';
+import { TwilioVerifyService } from 'src/common/services/twilio-verify.service';
 
 @Module({
   imports: [
@@ -38,17 +39,18 @@ import { ContactsModule } from 'src/contacts/contacts.module';
     AuthService,
     JwtStrategy,
     TwilioService,
+    TwilioVerifyService,
     JwtUtils,
     RolesGuard,
     {
       provide: InjectionToken.OTP_SERVICE,
-      useClass: TwilioService,
+      useClass: TwilioVerifyService,
     },
     {
       provide: InjectionToken.CONTACT_SERVICE,
       useClass: ContactService,
     },
   ],
-  exports: [RolesGuard, AuthService, TwilioService, InjectionToken.CONTACT_SERVICE],
+  exports: [RolesGuard, AuthService, TwilioService, TwilioVerifyService, InjectionToken.CONTACT_SERVICE],
 })
-export class AuthModule {}
+export class AuthModule { }

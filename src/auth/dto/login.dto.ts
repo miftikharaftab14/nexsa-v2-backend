@@ -12,9 +12,9 @@ export class LoginDto {
     required: true,
   })
   @IsNotEmpty()
-  @IsUSPhoneNumber({
-    message: Descriptions.PHONE_FORMAT_DESC,
-  })
+  // @IsUSPhoneNumber({
+  //   message: Descriptions.PHONE_FORMAT_DESC,
+  // })
   phone_number: string;
 
   @ApiProperty({

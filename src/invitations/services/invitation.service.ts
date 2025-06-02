@@ -27,7 +27,7 @@ export class InvitationService implements IInvitationService {
     @Inject(InjectionToken.INVITATION_STRATEGIES)
     private readonly strategies: IInvitationStrategy[],
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
   private selectStrategy(contact: Contact): IInvitationStrategy {
     // 1. First check if contact has phone number
     if (contact.phone_number) {
@@ -60,7 +60,7 @@ export class InvitationService implements IInvitationService {
     try {
       this.logger.debug(LogMessages.INVITATION_CREATE_ATTEMPT);
 
-      const inviteToken = uuidv4();
+      const inviteToken = this.generateRandomCode();
 
       // Send SMS with deep link
       // 2. Select appropriate strategy
@@ -94,6 +94,16 @@ export class InvitationService implements IInvitationService {
         'INVITATION_CREATION_FAILED',
       );
     }
+  }
+
+  generateRandomCode(length = 6): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      const randomIndex = Math.floor(Math.random() * chars.length);
+      result += chars[randomIndex];
+    }
+    return result;
   }
 
   async cancelInvitation(contactId: bigint): Promise<void> {
@@ -219,7 +229,31 @@ export class InvitationService implements IInvitationService {
     }
   }
 
-  async getInvitationById(id: number): Promise<Invitation> {
+  async getInvitationByNumber(phoneNumber: string): Promise<Invitation[]> {
+    try {
+      this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, phoneNumber);
+
+      const invitation = await this.invitationRepo.find({
+        where: { contact: { phone_number: phoneNumber }, status: InvitationStatus.PENDING },
+        relations: ['contact', 'contact.seller'],
+      });
+
+      if (!invitation) {
+        throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITATION_NOT_FOUND');
+      }
+
+      this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, phoneNumber);
+      return invitation;
+
+    } catch (error) {
+      this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
+      throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  async getInvitationById(id: bigint): Promise<Invitation> {
     try {
       this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, id);
 
@@ -293,6 +327,52 @@ export class InvitationService implements IInvitationService {
       await this.invitationRepo.save(invitation);
 
       this.logger.log(LogMessages.INVITATION_UPDATE_SUCCESS, token);
+      return invitation;
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(
+        LogMessages.INVITATION_UPDATE_FAILED,
+        error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new BusinessException(Messages.INVITATION_UPDATE_FAILED, 'INVITATION_UPDATE_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  async updateInvitationStatusByNumber(
+    phoneNumber: string,
+    invite_id: bigint,
+    status: InvitationStatus,
+  ): Promise<Invitation> {
+    try {
+      this.logger.debug(LogMessages.INVITATION_UPDATE_ATTEMPT, phoneNumber);
+
+      const invitation = await this.invitationRepo.findOne({
+        where: {
+          contact: { phone_number: phoneNumber },
+          id: invite_id,
+        },
+      });
+
+      if (!invitation) {
+        throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITATION_NOT_FOUND');
+      }
+
+      invitation.status = status;
+      if (status === InvitationStatus.ACCEPTED) {
+        invitation.invite_accepted_at = new Date();
+      } else if (status === InvitationStatus.REJECTED) {
+        invitation.invite_cancelled_at = new Date();
+      }
+      // Add more status-specific logic if needed
+
+      await this.invitationRepo.save(invitation);
+
+      this.logger.log(LogMessages.INVITATION_UPDATE_SUCCESS, phoneNumber);
       return invitation;
     } catch (error) {
       if (error instanceof BusinessException) {

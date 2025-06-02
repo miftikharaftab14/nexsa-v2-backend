@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { BaseRepository } from 'src/common/repositories/base.repository';
 import { User } from '../entities/user.entity';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { UserRole } from 'src/common/enums/user-role.enum';
 
 @Injectable()
 export class UserRepository extends BaseRepository<User> {
@@ -56,6 +57,14 @@ export class UserRepository extends BaseRepository<User> {
     return this.repository
       .createQueryBuilder('user')
       .where('user.phone_number = :phoneNumber', { phoneNumber })
+      .getOne();
+  }
+
+  findByPhoneAndRole(phoneNumber: string, role: UserRole): Promise<User | null> {
+    return this.repository
+      .createQueryBuilder('user')
+      .where('user.phone_number = :phoneNumber', { phoneNumber })
+      .andWhere('user.role = :role', { role })
       .getOne();
   }
 

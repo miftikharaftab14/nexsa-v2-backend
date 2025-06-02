@@ -15,8 +15,8 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return "API for the Nexsa application, a platfrom for sale associates and their customers."', () => {
+      expect(appController.getDefault()).toBe('API for the Nexsa application, a platfrom for sale associates and their customers.');
     });
   });
 });

@@ -10,7 +10,7 @@ import { _200_invitation, _200_invitations, _404_invitation } from '../documenta
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class InvitationController {
-  constructor(private readonly invitationService: InvitationService) {}
+  constructor(private readonly invitationService: InvitationService) { }
 
   @Get('token/:token')
   @ApiOperation({ summary: Descriptions.GET_INVITATION_BY_TOKEN_SUMMARY })
@@ -25,7 +25,7 @@ export class InvitationController {
   @ApiResponse(_200_invitation)
   @ApiResponse(_404_invitation)
   async getInvitationById(@Param('id') id: string) {
-    return this.invitationService.getInvitationById(+id);
+    return this.invitationService.getInvitationById(BigInt(+id));
   }
 
   @Get('contact/:contactId')

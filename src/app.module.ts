@@ -13,6 +13,7 @@ import { ContactsModule } from './contacts/contacts.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { FilesModule } from './files/files.module';
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -28,6 +29,7 @@ import { FilesModule } from './files/files.module';
     ContactsModule,
     InvitationsModule,
     FilesModule,
+
   ],
   controllers: [AppController],
   providers: [AppService],

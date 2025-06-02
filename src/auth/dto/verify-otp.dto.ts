@@ -4,6 +4,7 @@ import { Examples } from 'src/common/enums/examples.enum';
 import { Descriptions } from 'src/common/enums/descriptions.enum';
 import { IsUSPhoneNumber } from 'src/common/validators/phone-number.validator';
 import { OtpPurpose } from 'src/common/enums/otp.enum';
+import { UserRole } from 'src/common/enums/user-role.enum';
 
 export class VerifyOtpDto {
   @ApiProperty({
@@ -12,9 +13,9 @@ export class VerifyOtpDto {
     required: true,
   })
   @IsNotEmpty()
-  @IsUSPhoneNumber({
-    message: Descriptions.PHONE_FORMAT_DESC,
-  })
+  // @IsUSPhoneNumber({
+  //   message: Descriptions.PHONE_FORMAT_DESC,
+  // })
   phone_number: string;
 
   @ApiProperty({
@@ -37,4 +38,12 @@ export class VerifyOtpDto {
   @IsOptional()
   @IsEnum(OtpPurpose)
   purpose?: OtpPurpose;
+
+
+  @ApiProperty({
+    required: true,
+  })
+  @IsNotEmpty()
+  @IsEnum(UserRole)
+  role: UserRole;
 }

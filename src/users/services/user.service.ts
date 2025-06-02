@@ -11,6 +11,7 @@ import { validateImageFile } from '../../common/validators/file.validator';
 import { BusinessException } from 'src/common/exceptions/business.exception';
 import { ConfigService } from '@nestjs/config';
 import { ExtendedUser } from '../interfaces/user.interface';
+import { UserRole } from 'src/common/enums/user-role.enum';
 
 /**
  * Service responsible for managing user-related operations including CRUD operations,
@@ -254,6 +255,33 @@ export class UserService {
       throw error;
     }
   }
+
+  /**
+  * Retrieves a user by their phone number.
+  * @param phoneNumber - The phone number to search for
+  * @returns Promise<User | null> - The found user or null if not found
+  * @throws Error if retrieval fails
+  */
+  async findByPhoneAndRole(phoneNumber: string, role: UserRole): Promise<User | null> {
+    try {
+      this.logger.debug(LogMessages.USER_FETCH_ATTEMPT, `phone: ${phoneNumber}`);
+      const user = await this.userRepo.findByPhoneAndRole(phoneNumber, role);
+      if (!user) {
+        this.logger.warn(LogMessages.USER_NOT_FOUND, `phone: ${phoneNumber}`);
+      } else {
+        this.logger.log(LogMessages.USER_FETCH_SUCCESS, `phone: ${phoneNumber}`);
+      }
+      return user;
+    } catch (error) {
+      this.logger.error(
+        LogMessages.USER_FETCH_FAILED,
+        error instanceof Error ? error.message : LogMessages.UNKNOWN_ERROR,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+
   /**
    * Retrieves a user by their email address.
    * @param email - The email address to search for

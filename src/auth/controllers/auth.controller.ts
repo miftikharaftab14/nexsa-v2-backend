@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { AuthService } from '../services/auth.service';
 import { SignupDto } from '../dto/signup.dto';
 import { LoginDto } from '../dto/login.dto';
@@ -8,6 +8,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { ApiResponse as ApiResponseInterface } from 'src/common/interfaces/api-response.interface';
 import { CustomValidationPipe } from 'src/common/pipes/validation.pipe';
 import { Descriptions } from 'src/common/enums/descriptions.enum';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import {
   _200_login,
   _200_resendOtp,
@@ -19,12 +20,13 @@ import {
 } from '../documentaion/api.response';
 import { Messages } from 'src/common/enums/messages.enum';
 import { User } from '../../users/entities/user.entity';
+import { AcceptInviteDto } from '../dto/accept-invite.dto';
 
 @Controller('auth')
 @ApiTags('auth')
 @ApiBearerAuth('JWT-auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
@@ -54,7 +56,7 @@ export class AuthController {
     const result = await this.authService.login(loginDto);
     return {
       success: true,
-      message: Messages.OTP_SENT,
+      message: Messages.USER_FETCHED,
       status: HttpStatus.OK,
       data: result,
     };
@@ -67,7 +69,7 @@ export class AuthController {
   @ApiResponse(_400_verifyOtp)
   async verifyOtp(
     @Body(new CustomValidationPipe()) verifyOtpDto: VerifyOtpDto,
-  ): Promise<ApiResponseInterface<{ accessToken: string; user: User }>> {
+  ): Promise<ApiResponseInterface<{ user: User | null }>> {
     const result = await this.authService.verifyOtp(verifyOtpDto);
     return {
       success: true,
@@ -77,15 +79,14 @@ export class AuthController {
     };
   }
 
-  @Post('resend-otp')
+  @Post('send-otp')
   @ApiResponse(_200_resendOtp)
   @HttpCode(HttpStatus.OK)
   async resendOtp(
     @Body() resendOtpDto: ResendOtpDto,
   ): Promise<ApiResponseInterface<{ message: string }>> {
-    const result = await this.authService.resendOtp(
-      resendOtpDto.phone_number,
-      resendOtpDto.purpose,
+    const result = await this.authService.sendOtp(
+      resendOtpDto.phone_number
     );
     return {
       success: true,
@@ -94,4 +95,24 @@ export class AuthController {
       data: result,
     };
   }
+
+  @Post('accept-invite')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Accept an invitation' })
+  @ApiResponse(_200_resendOtp)
+  @HttpCode(HttpStatus.OK)
+  async acceptInvite(
+    @Body() acceptInviteDto: AcceptInviteDto,
+  ): Promise<ApiResponseInterface<{ message: string }>> {
+    const result = await this.authService.acceptInvite(
+      acceptInviteDto
+    );
+    return {
+      success: true,
+      message: Messages.INVITATION_ACCEPTED,
+      status: HttpStatus.OK,
+      data: result,
+    };
+  }
 }
+

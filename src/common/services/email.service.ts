@@ -14,6 +14,7 @@ export class EmailService implements IEmailService {
   constructor(private readonly configService: ConfigService) {
     this.transporter = createTransport(getEmailConfig(this.configService));
     this.logger.log('Email transporter initialized', getEmailConfig(this.configService));
+    this.logger.log('test',configService.get<string>('NODE_ENV'));
   }
 
   async sendEmail(to: string, subject: string, html: string): Promise<void> {

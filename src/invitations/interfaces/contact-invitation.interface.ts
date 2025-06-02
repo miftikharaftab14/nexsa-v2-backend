@@ -7,7 +7,9 @@ export interface IInvitationService {
   cancelInvitation(invitationId: bigint): Promise<void>;
   acceptInvitation(token: string, userId: number): Promise<void>;
   getInvitationByToken(token: string): Promise<Invitation>;
-  getInvitationById(id: number): Promise<Invitation>;
+  getInvitationByNumber(phoneNumber: string): Promise<Invitation[]>;
+  getInvitationById(id: bigint): Promise<Invitation>;
   getInvitationsByContactId(contactId: number): Promise<Invitation[]>;
   updateInvitationStatusByToken(token: string, status: InvitationStatus): Promise<Invitation>;
+  updateInvitationStatusByNumber(phoneNumber: string, invite_id: bigint, status: InvitationStatus): Promise<Invitation>;
 }

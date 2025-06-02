@@ -2,22 +2,22 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { IInvitationStrategy } from '../interfaces/invitation-strategy.interface';
 import { Contact } from '../../contacts/entities/contact.entity';
 import { ConfigService } from '@nestjs/config';
-import { IMessagingService } from 'src/common/interfaces/messaging-service.interface';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { BusinessException } from 'src/common/exceptions/business.exception';
 import { InvitationMethod } from 'src/common/enums/contact-invitation.enum';
 import { LogContexts } from 'src/common/enums/logging.enum';
+import { TwilioMessagingService } from 'src/common/services/twilio-messaging.service';
 
 @Injectable()
 export class SMSInvitationStrategy implements IInvitationStrategy {
   private readonly logger = new Logger(LogContexts.SMSINVITAIONSTRATEGY);
   constructor(
     @Inject(InjectionToken.MESSAGING_SERVICE)
-    private readonly messagingService: IMessagingService,
+    private readonly messagingService: TwilioMessagingService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
-  async sendInvitation(contact: Contact, inviteToken: string): Promise<void> {
+  async sendInvitation(contact: Contact): Promise<void> {
     try {
       // 1. Validate contact has phone number
       if (!contact.phone_number) {
@@ -27,9 +27,9 @@ export class SMSInvitationStrategy implements IInvitationStrategy {
         );
       }
       // 2. Generate message
-      const message = this.getInvitationMessage(contact, inviteToken);
+      const message = this.getInvitationMessage(contact);
       // 3. Send via messaging service (TwilioService)
-      await this.messagingService.sendMessage(contact.phone_number, message);
+      await this.messagingService.sendSMSWithMessagingService(contact.phone_number, message);
     } catch (error) {
       // Handle specific errors
       this.logger.error('Failed to send SMS invitation', error);
@@ -40,11 +40,14 @@ export class SMSInvitationStrategy implements IInvitationStrategy {
     }
   }
 
-  getInvitationMessage(contact: Contact, inviteToken: string): string {
-    const appUrl = this.configService.get<string>('APP_URL');
-    const deepLink = `${appUrl}/${inviteToken}`;
-    return `You've been invited to connect with ${contact?.seller?.username}. Click here to accept: ${deepLink}`;
+  getInvitationMessage(contact: Contact): string {
+
+    const androidUrl = this.configService.get<string>('GOOGLE_PLAY_STORE_URL');
+    const iosUrl = this.configService.get<string>('APPLE_APP_STORE_URL');
+
+    return `${contact?.seller?.username} invites you to join their store on the Nexsa app! Download it from: Android: ${androidUrl} iOS: ${iosUrl} Reply STOP to unsubscribe.`;
   }
+
   // Add method to check if strategy is applicable
   canHandle(contact: Contact): boolean {
     return !!contact.phone_number;

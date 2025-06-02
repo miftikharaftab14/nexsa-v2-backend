@@ -24,7 +24,7 @@ export class ContactService implements IContactUpdate {
     @Inject(InjectionToken.INVITATION_SERVICE)
     private readonly invitationService: IInvitationService,
     private dataSource: DataSource,
-  ) {}
+  ) { }
 
   async create(createContactDto: CreateContactDto): Promise<ApiResponse<Contact>> {
     try {
@@ -115,7 +115,7 @@ export class ContactService implements IContactUpdate {
       await queryRunner.connect();
       await queryRunner.startTransaction();
       this.logger.debug(LogMessages.CONTACT_UPDATE_ATTEMPT, id);
-      const contact = await this.contactRepo.findOneById(id);
+      const contact = await this.contactRepo.findById(id);
       if (!contact) {
         throw new BusinessException(Messages.CONTACT_NOT_FOUND, 'CONTACT_NOT_FOUND');
       }
