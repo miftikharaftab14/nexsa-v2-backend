@@ -191,11 +191,12 @@ export class AuthService {
     return { message: otpResult.message };
   }
 
-  async acceptInvite(dto: AcceptInviteDto): Promise<{ message: string }> {
+  async acceptInvite(dto: AcceptInviteDto): Promise<{ message: string, data: Invitation }> {
 
     this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, dto.invite_id);
 
     //update the invitation status to ACCEPTED
+
     await this.invitaionService.updateInvitationStatusById(
       dto.invite_id,
       dto.invitation_status,
@@ -203,11 +204,12 @@ export class AuthService {
 
     let invitation = await this.invitaionService.getInvitationById(dto.invite_id)
 
+
     await this.contactService.update(Number(invitation.contact_id), {
       invited_user_id: Number(dto.user_id),
       status: ContactStatus.ACCEPTED,
     });
 
-    return { message: 'invite accepted' };
+    return { message: 'invite accepted', data: invitation };
   }
 }

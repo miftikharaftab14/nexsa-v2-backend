@@ -360,6 +360,7 @@ export class InvitationService implements IInvitationService {
         where: {
           id: invite_id,
         },
+        relations: ['contact', 'contact.seller'],
       });
 
       if (!invitation) {
