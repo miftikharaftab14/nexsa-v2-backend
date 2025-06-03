@@ -203,11 +203,11 @@ export class InvitationService implements IInvitationService {
       );
     }
   }
-  async getInvitationByToken(token: string): Promise<Invitation> {
+  async getInvitationByToken(token: string): Promise<Invitation[]> {
     try {
       this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, token);
 
-      const invitation = await this.invitationRepo.findOne({
+      const invitation = await this.invitationRepo.find({
         where: { invite_token: token },
         relations: ['contact', 'contact.seller'],
       });

@@ -90,7 +90,10 @@ export class AuthService {
 
       if (dto.role === UserRole.CUSTOMER) {
 
-        invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number)
+        if(!dto.deepLinktoken)
+          invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number)
+        else
+          invitaions = await this.invitaionService.getInvitationByToken(dto.deepLinktoken);
 
         if (invitaions && invitaions.length > 0) {
           if (!user) {
