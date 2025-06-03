@@ -393,4 +393,9 @@ export class InvitationService implements IInvitationService {
       });
     }
   }
+
+  // In InvitationService
+  async deleteInvitationsByContactId(contactId: number): Promise<void> {
+    await this.invitationRepo.delete({ contact_id: BigInt(contactId) });
+  }
 }

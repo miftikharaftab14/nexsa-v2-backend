@@ -12,4 +12,5 @@ export interface IInvitationService {
   getInvitationsByContactId(contactId: number): Promise<Invitation[]>;
   updateInvitationStatusByToken(token: string, status: InvitationStatus): Promise<Invitation>;
   updateInvitationStatusById(invite_id: bigint, status: InvitationStatus): Promise<Invitation>;
+  deleteInvitationsByContactId(contactId: number): Promise<void>;
 }

@@ -178,6 +178,10 @@ export class ContactService implements IContactUpdate {
       if (!contact) {
         throw new BusinessException(Messages.CONTACT_NOT_FOUND, 'CONTACT_NOT_FOUND');
       }
+
+      // Delete associated invitations first
+      await this.invitationService.deleteInvitationsByContactId(id);
+
       await this.contactRepo.delete(id);
       this.logger.log(LogMessages.CONTACT_DELETE_SUCCESS, id);
       return {
