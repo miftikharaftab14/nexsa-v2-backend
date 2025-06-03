@@ -51,6 +51,7 @@ export enum Examples {
   // ...existing examples...
   INVITATION_ID = 11,
   INVITATION_TOKEN = 'abc123xyz',
+  INVITATION_STATUS = 'REJECTED',
 
   FILE_ID = 1001,
   PRESIGNED_URL = 'https://example-bucket.s3.amazonaws.com/profile-pictures/user123.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...',

@@ -114,5 +114,6 @@ export class AuthController {
       data: result,
     };
   }
+
 }
 

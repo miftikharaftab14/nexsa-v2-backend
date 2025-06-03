@@ -207,17 +207,23 @@ export class InvitationService implements IInvitationService {
     try {
       this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, token);
 
-      const invitation = await this.invitationRepo.find({
-        where: { invite_token: token },
+      const invites = await this.invitationRepo.find({
+        where: {
+          status: InvitationStatus.PENDING,
+        },
         relations: ['contact', 'contact.seller'],
       });
 
-      if (!invitation) {
+      this.logger.debug("fetching", invites);
+
+      if (!invites || invites.length === 0) {
         throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITATION_NOT_FOUND');
       }
 
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, token);
-      return invitation;
+
+
+      return invites;
     } catch (error) {
       if (error instanceof BusinessException) {
         throw error;

@@ -1,5 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsNotEmpty } from "class-validator";
+import { InvitationStatus } from "src/common/enums/contact-invitation.enum";
 import { Descriptions } from "src/common/enums/descriptions.enum";
 import { Examples } from "src/common/enums/examples.enum";
 import { IsUSPhoneNumber } from "src/common/validators/phone-number.validator";
@@ -31,4 +32,11 @@ export class AcceptInviteDto {
     })
     @IsNotEmpty()
     user_id: bigint;
+
+    @ApiProperty({
+        description: Descriptions.INVITATION_STATUS_DESC,
+        example: Examples.INVITATION_STATUS,
+        required: true,
+    })
+    invitation_status: InvitationStatus;
 }

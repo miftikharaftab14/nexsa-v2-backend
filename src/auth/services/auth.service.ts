@@ -90,7 +90,7 @@ export class AuthService {
 
       if (dto.role === UserRole.CUSTOMER) {
 
-        if(!dto.deepLinktoken)
+        if (!dto.deepLinktoken)
           invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number)
         else
           invitaions = await this.invitaionService.getInvitationByToken(dto.deepLinktoken);
@@ -198,7 +198,7 @@ export class AuthService {
     await this.invitaionService.updateInvitationStatusByNumber(
       phoneNumber,
       dto.invite_id,
-      InvitationStatus.ACCEPTED,
+      dto.invitation_status,
     );
 
     let invitation = await this.invitaionService.getInvitationById(dto.invite_id)
