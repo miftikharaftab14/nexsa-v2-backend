@@ -85,12 +85,12 @@ export class AuthService {
   async login(dto: LoginDto): Promise<{ message: string, user: User, invitations: Invitation[] | null, token: string | null }> {
     try {
       this.logger.debug(LogMessages.AUTH_LOGIN_ATTEMPT, dto.phone_number);
-      let user = await this.userService.findByPhoneAndRole(dto.phone_number.startsWith('+') ? dto.phone_number.slice(1) : dto.phone_number, dto.role);
+      let user = await this.userService.findByPhoneAndRole(dto.phone_number, dto.role);
       let invitaions: Invitation[] | null = null;
 
       if (dto.role === UserRole.CUSTOMER) {
 
-        invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number.startsWith('+') ? dto.phone_number.slice(1) : dto.phone_number)
+        invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number)
 
         if (invitaions && invitaions.length > 0) {
           if (!user) {
@@ -145,7 +145,7 @@ export class AuthService {
     try {
       this.logger.debug(LogMessages.AUTH_OTP_VERIFY_ATTEMPT, dto.phone_number);
 
-      const user = await this.userService.findByPhoneAndRole(dto.phone_number.startsWith('+') ? dto.phone_number.slice(1) : dto.phone_number, dto.role);
+      const user = await this.userService.findByPhoneAndRole(dto.phone_number, dto.role);
 
       // Verify OTP via OTP service
       const isValidOtp = await this.interfaceTwilioVerifyService.checkTheVerificationToken(dto.phone_number, dto.otp);
@@ -189,7 +189,7 @@ export class AuthService {
 
   async acceptInvite(dto: AcceptInviteDto): Promise<{ message: string }> {
 
-    const phoneNumber = dto.phone_number.startsWith('+') ? dto.phone_number.slice(1) : dto.phone_number;
+    const phoneNumber = dto.phone_number;
 
     //update the invitation status to ACCEPTED
     await this.invitaionService.updateInvitationStatusByNumber(
