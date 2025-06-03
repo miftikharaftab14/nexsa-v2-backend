@@ -19,6 +19,7 @@ import { ContactStatus } from 'src/common/enums/contact-status.enum';
 import { Invitation } from 'src/invitations/entities/invitation.entity';
 import { AcceptInviteDto } from '../dto/accept-invite.dto';
 import { log } from 'console';
+import { Contact } from 'src/contacts/entities/contact.entity';
 
 @Injectable()
 export class AuthService {
@@ -83,11 +84,12 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto): Promise<{ message: string, user: User, invitations: Invitation[] | null, token: string | null }> {
+  async login(dto: LoginDto): Promise<{ message: string, user: User, invitations: Invitation[] | null, contacts: Contact[] | null, token: string | null }> {
     try {
       this.logger.debug(LogMessages.AUTH_LOGIN_ATTEMPT, dto.phone_number);
       let user = await this.userService.findByPhoneAndRole(dto.phone_number, dto.role);
       let invitaions: Invitation[] | null = null;
+      let contacts: Contact[] | null = null;
 
       if (dto.role === UserRole.CUSTOMER) {
 
@@ -95,6 +97,7 @@ export class AuthService {
           invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number)
         else
           invitaions = await this.invitaionService.getInvitationByToken(dto.deepLinktoken);
+
 
         if (invitaions && invitaions.length > 0) {
           if (!user) {
@@ -113,7 +116,10 @@ export class AuthService {
       if (user) {
         let token = this.jwtService.sign({ sub: user.id, role: user.role });
         this.logger.log(LogMessages.AUTH_LOGIN_SUCCESS, dto.phone_number);
-        return { message: LogMessages.AUTH_LOGIN_SUCCESS, user: user, invitations: invitaions, token: token };
+        if (dto.role === UserRole.CUSTOMER) {
+          contacts = await this.contactService.findAllByInvitedUserId(user.id);
+        }
+        return { message: LogMessages.AUTH_LOGIN_SUCCESS, user: user, invitations: invitaions, contacts: contacts, token: token };
       }
       else {
         this.logger.warn(

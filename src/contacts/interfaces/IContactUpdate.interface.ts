@@ -5,4 +5,5 @@ import { Contact } from '../entities/contact.entity';
 export interface IContactUpdate {
   update(id: number, updateContactDto: UpdateContactDto): Promise<ApiResponse<Contact>>;
   // Add other method signatures as needed
+  findAllByInvitedUserId(id: bigint): Promise<Contact[]>;
 }

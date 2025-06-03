@@ -32,4 +32,12 @@ export class ContactRepository extends BaseRepository<Contact> {
       relations: ['seller', 'invited_user'],
     });
   }
+
+  async findByInvitedUserId(invitedUserId: bigint): Promise<Contact[]> {
+    return this.repository.find({
+      where: { invited_user_id: BigInt(invitedUserId) },
+      relations: ['seller'],
+      order: { created_at: 'DESC' },
+    });
+  }
 }

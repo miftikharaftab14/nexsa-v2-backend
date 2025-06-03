@@ -217,4 +217,24 @@ export class ContactService implements IContactUpdate {
       });
     }
   }
+
+  async findAllByInvitedUserId(invitiedUserId: bigint): Promise<Contact[]> {
+    try {
+      this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT);
+
+      const contacts = await this.contactRepo.findByInvitedUserId(invitiedUserId);
+
+
+      this.logger.log(LogMessages.CONTACT_FETCH_SUCCESS);
+      return contacts;
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(LogMessages.CONTACT_FETCH_FAILED, error);
+      throw new BusinessException(Messages.CONTACT_FETCH_FAILED, 'CONTACT_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
 }
