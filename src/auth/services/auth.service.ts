@@ -18,6 +18,7 @@ import { IContactUpdate } from 'src/contacts/interfaces/IContactUpdate.interface
 import { ContactStatus } from 'src/common/enums/contact-status.enum';
 import { Invitation } from 'src/invitations/entities/invitation.entity';
 import { AcceptInviteDto } from '../dto/accept-invite.dto';
+import { log } from 'console';
 
 @Injectable()
 export class AuthService {
@@ -192,11 +193,10 @@ export class AuthService {
 
   async acceptInvite(dto: AcceptInviteDto): Promise<{ message: string }> {
 
-    const phoneNumber = dto.phone_number;
+    this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, dto.invite_id);
 
     //update the invitation status to ACCEPTED
-    await this.invitaionService.updateInvitationStatusByNumber(
-      phoneNumber,
+    await this.invitaionService.updateInvitationStatusById(
       dto.invite_id,
       dto.invitation_status,
     );

@@ -349,17 +349,15 @@ export class InvitationService implements IInvitationService {
     }
   }
 
-  async updateInvitationStatusByNumber(
-    phoneNumber: string,
+  async updateInvitationStatusById(
     invite_id: bigint,
     status: InvitationStatus,
   ): Promise<Invitation> {
     try {
-      this.logger.debug(LogMessages.INVITATION_UPDATE_ATTEMPT, phoneNumber);
+      this.logger.debug(LogMessages.INVITATION_UPDATE_ATTEMPT, invite_id);
 
       const invitation = await this.invitationRepo.findOne({
         where: {
-          contact: { phone_number: phoneNumber },
           id: invite_id,
         },
       });
@@ -378,7 +376,7 @@ export class InvitationService implements IInvitationService {
 
       await this.invitationRepo.save(invitation);
 
-      this.logger.log(LogMessages.INVITATION_UPDATE_SUCCESS, phoneNumber);
+      this.logger.log(LogMessages.INVITATION_UPDATE_SUCCESS, invite_id);
       return invitation;
     } catch (error) {
       if (error instanceof BusinessException) {
