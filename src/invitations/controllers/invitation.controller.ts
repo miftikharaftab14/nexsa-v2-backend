@@ -35,4 +35,12 @@ export class InvitationController {
   async getInvitationsByContactId(@Param('contactId') contactId: string) {
     return this.invitationService.getInvitationsByContactId(+contactId);
   }
+
+  @Get('user/:phoneNumber')
+  @ApiOperation({ summary: Descriptions.GET_INVITATIONS_BY_USERS_PHONE_NUMBER })
+  @ApiResponse(_200_invitations)
+  @ApiResponse(_404_invitation)
+  async getInvitationsByUsersPhoneNumber(@Param('phoneNumber') phoneNumber: string) {
+    return this.invitationService.getInvitationByNumber(phoneNumber);
+  }
 }

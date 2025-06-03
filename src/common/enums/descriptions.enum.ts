@@ -57,6 +57,7 @@ export enum Descriptions {
   GET_INVITATION_BY_TOKEN_SUMMARY = 'Get invitation details by token',
   GET_INVITATION_BY_ID_SUMMARY = 'Get invitation details by ID',
   GET_INVITATIONS_BY_CONTACT_SUMMARY = 'Get all invitations for a contact',
+  GET_INVITATIONS_BY_USERS_PHONE_NUMBER = 'Get all invitations for a user by phone number',
   INVITATION_TOKEN_DESC = 'Unique token of the invitation',
   INVITATION_ID_DESC = 'ID of the invitation',
   INVITATION_CONTACT_ID_DESC = 'ID of the contact',
