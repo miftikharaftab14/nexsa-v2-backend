@@ -8,7 +8,7 @@ services:
     ports:
       - '${POSTGRES_PORT}:5432'
     env_file:
-      - .env.development
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -18,9 +18,9 @@ services:
     build:
       context: .
     ports:
-      - "3000:3000"
+      - "80:3000"
     env_file:
-      - .env.development
+      - .env
     environment:
       - NODE_ENV=${NODE_ENV}
     volumes:
@@ -40,13 +40,12 @@ services:
     networks:
       - app-network
 
-  
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin-nexsa
     restart: always
     env_file:
-      - .env.development
+      - .env
     ports:
       - '${PGADMIN_EXPOSED_PORT}:80'
     depends_on:
