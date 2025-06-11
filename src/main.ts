@@ -5,9 +5,11 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { BigIntSerializerInterceptor } from './common/interceptors/bigint-serializer.interceptor';
 import { CustomValidationPipe } from './common/pipes/validation.pipe';
+import { join } from 'path';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
 
@@ -16,6 +18,7 @@ async function bootstrap() {
 
   // Global validation pipe
   app.useGlobalPipes(new CustomValidationPipe());
+  app.useStaticAssets(join(__dirname, '..', 'public'));
 
   app.useGlobalInterceptors(new BigIntSerializerInterceptor());
   // these configuration is used to validate the swagger apis.

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>New Customer</title>
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #9052fb, #fa575c);
+        font-family: Arial, sans-serif;
+        color: white;
+        text-align: center;
+      }
+
+      .store-buttons {
+        margin-top: 20px;
+        display: flex;
+        gap: 20px;
+      }
+
+      .store-buttons a img {
+        height: 60px;
+        transition: transform 0.3s ease;
+      }
+
+      .store-buttons a img:hover {
+        transform: scale(1.05);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>You're Invited!</h1>
+    <p>
+      We're excited to have you on board. Click the link below to accept your invitation and get
+      started:
+    </p>
+
+    <p>Get it now from your favorite store</p>
+    <div class="store-buttons">
+      <a href="https://play.google.com/store" target="_blank">
+        <img
+          src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg"
+          alt="Get it on Google Play"
+        />
+      </a>
+      <a href="https://www.apple.com/app-store/" target="_blank">
+        <img
+          src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
+          alt="Download on the App Store"
+        />
+      </a>
+    </div>
+  </body>
+</html>

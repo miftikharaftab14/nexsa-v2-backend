@@ -7,7 +7,6 @@ import { Contact } from '../../contacts/entities/contact.entity';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { Messages } from '../../common/enums/messages.enum';
 import { LogMessages, LogContexts } from '../../common/enums/logging.enum';
-import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { IInvitationService } from 'src/invitations/interfaces/contact-invitation.interface';
 import { Invitation } from '../entities/invitation.entity';
