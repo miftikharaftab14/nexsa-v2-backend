@@ -12,7 +12,8 @@ import { CommonModule } from './common/common.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { FilesModule } from './files/files.module';
-
+import { CategoriesModule } from './categories/categories.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -29,7 +30,8 @@ import { FilesModule } from './files/files.module';
     ContactsModule,
     InvitationsModule,
     FilesModule,
-
+    CategoriesModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
