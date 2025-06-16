@@ -63,4 +63,6 @@ export enum Descriptions {
   INVITATION_CONTACT_ID_DESC = 'ID of the contact',
   INVITATION_METHOD_DESC = 'Method used for invitation (SMS/EMAIL)',
   INVITATION_STATUS_DESC = 'Current status of the invitation',
+
+  PRODUCT_IMAGES = 'This is for products images',
 }

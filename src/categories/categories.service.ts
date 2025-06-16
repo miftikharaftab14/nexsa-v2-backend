@@ -34,6 +34,19 @@ export class CategoriesService {
       relations: ['products', 'user'],
     });
   }
+  async findAllByUserID(userId: number, search?: string): Promise<Category[]> {
+    const queryBuilder = this.categoriesRepository
+      .createQueryBuilder('category')
+      .leftJoinAndSelect('category.products', 'product')
+      .leftJoinAndSelect('category.user', 'user')
+      .where('user.id = :userId', { userId });
+
+    if (search) {
+      queryBuilder.andWhere('category.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    return await queryBuilder.getMany();
+  }
 
   async findOne(id: number): Promise<Category> {
     const category = await this.categoriesRepository.findOne({

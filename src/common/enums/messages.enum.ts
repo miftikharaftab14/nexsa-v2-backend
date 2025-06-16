@@ -65,4 +65,32 @@ export enum Messages {
   // Profile Picture Messages
   PROFILE_PICTURE_UPDATED = 'Profile picture updated successfully',
   INVALID_FILE_TYPE = 'Invalid file type. Only jpg, jpeg, and png files are allowed.',
+
+  //Categories Messages
+  CATEGORY_CREATED = 'Category created successfully',
+  CATEGORY_CREATION_FAILED = 'Failed to create category',
+
+  CATEGORY_UPDATED = 'Category updated successfully',
+  CATEGORY_UPDATE_FAILED = 'Failed to update category',
+
+  CATEGORY_DELETED = 'Category deleted successfully',
+  CATEGORY_DELETION_FAILED = 'Failed to delete category',
+
+  CATEGORY_FETCHED = 'Category fetched successfully',
+  CATEGORIES_FETCHED = 'Categories fetched successfully',
+  CATEGORY_NOT_FOUND = 'Category not found',
+
+  // Product Messages
+  PRODUCT_CREATED = 'Product created successfully',
+  PRODUCT_CREATION_FAILED = 'Failed to create product',
+
+  PRODUCT_UPDATED = 'Product updated successfully',
+  PRODUCT_UPDATE_FAILED = 'Failed to update product',
+
+  PRODUCT_DELETED = 'Product deleted successfully',
+  PRODUCT_DELETION_FAILED = 'Failed to delete product',
+
+  PRODUCT_FETCHED = 'Product fetched successfully',
+  PRODUCTS_FETCHED = 'Products fetched successfully',
+  PRODUCT_NOT_FOUND = 'Product not found',
 }

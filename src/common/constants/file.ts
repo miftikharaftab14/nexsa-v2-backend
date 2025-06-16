@@ -1,5 +1,6 @@
 export enum FileSize {
   PROFILE_IMAGE_SIZE = 5242880,
+  PRODUCT_IMAGE = 5242880,
 }
 
 export enum MimeTypes {

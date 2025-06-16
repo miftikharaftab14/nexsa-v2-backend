@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseIntPipe,
+  HttpStatus,
+  Query,
+} from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -12,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { Messages } from 'src/common/enums/messages.enum';
 
 @ApiTags('categories')
 @ApiBearerAuth()
@@ -27,19 +39,29 @@ export class CategoriesController {
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - Seller access required' })
-  create(@Body() createCategoryDto: CreateCategoryDto) {
-    return this.categoriesService.create(createCategoryDto);
+  async create(@Body() createCategoryDto: CreateCategoryDto) {
+    const category = await this.categoriesService.create(createCategoryDto);
+    return {
+      success: true,
+      message: Messages.CATEGORY_CREATED,
+      status: HttpStatus.CREATED,
+      data: category,
+    };
   }
 
-  @Get()
-  @ApiOperation({ summary: 'Get all categories' })
+  @Get('seller/:id')
+  @ApiOperation({ summary: 'Get all categories by seller id' })
   @ApiResponse({ status: 200, description: 'Return all categories' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page' })
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Search term' })
-  findAll() {
-    return this.categoriesService.findAll();
+  async findAll(@Param('id') id: number, @Query('search') search: string) {
+    const categories = await this.categoriesService.findAllByUserID(id, search);
+    return {
+      success: true,
+      message: Messages.CATEGORIES_FETCHED,
+      status: HttpStatus.OK,
+      data: categories,
+    };
   }
 
   @Get(':id')
@@ -48,8 +70,14 @@ export class CategoriesController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Category not found' })
   @ApiParam({ name: 'id', type: 'number', description: 'Category ID' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.categoriesService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    const category = await this.categoriesService.findOne(id);
+    return {
+      success: true,
+      message: Messages.CATEGORY_FETCHED,
+      status: HttpStatus.OK,
+      data: category,
+    };
   }
 
   @Patch(':id')
@@ -61,8 +89,17 @@ export class CategoriesController {
   @ApiResponse({ status: 403, description: 'Forbidden - Seller access required' })
   @ApiResponse({ status: 404, description: 'Category not found' })
   @ApiParam({ name: 'id', type: 'number', description: 'Category ID' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateCategoryDto: UpdateCategoryDto) {
-    return this.categoriesService.update(id, updateCategoryDto);
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateCategoryDto: UpdateCategoryDto,
+  ) {
+    const category = await this.categoriesService.update(id, updateCategoryDto);
+    return {
+      success: true,
+      message: Messages.CATEGORY_UPDATED,
+      status: HttpStatus.OK,
+      data: category,
+    };
   }
 
   @Delete(':id')
@@ -73,7 +110,13 @@ export class CategoriesController {
   @ApiResponse({ status: 403, description: 'Forbidden - Seller access required' })
   @ApiResponse({ status: 404, description: 'Category not found' })
   @ApiParam({ name: 'id', type: 'number', description: 'Category ID' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.categoriesService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    const category = await this.categoriesService.remove(id);
+    return {
+      success: true,
+      message: Messages.CATEGORY_DELETED,
+      status: HttpStatus.OK,
+      data: category,
+    };
   }
 }
