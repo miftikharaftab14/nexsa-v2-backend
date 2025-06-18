@@ -144,6 +144,6 @@ export class CategoriesService {
   }
 
   async remove(id: number): Promise<void> {
-    await this.categoriesRepository.delete(id);
+    await this.categoriesAss.delete(id);
   }
 }

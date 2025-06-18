@@ -14,15 +14,31 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  UseGuards,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { ApiBody, ApiConsumes, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CreateProductDto } from './dto/create-product.dto';
 import { FileSize } from 'src/common/constants/file';
 import { Messages } from 'src/common/enums/messages.enum';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { UserRole } from 'src/common/enums/user-role.enum';
+import { Roles } from 'src/auth/decorators/roles.decorator';
 
+@ApiTags('products')
+@ApiBearerAuth()
 @Controller('products')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@ApiBearerAuth('JWT-auth')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
@@ -72,10 +88,9 @@ export class ProductsController {
   }
 
   @Get()
-  async findAll(@Query('categoryId', ParseIntPipe) categoryId?: number) {
-    if (categoryId) {
-      return this.productsService.findByCategory(categoryId);
-    }
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'get products for seller' })
+  async findAll() {
     const result = await this.productsService.findAll();
     return {
       success: true,
