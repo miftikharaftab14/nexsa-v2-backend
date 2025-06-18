@@ -4,6 +4,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { Contact } from '../entities/contact.entity';
 import { BaseRepository } from '../../common/repositories/base.repository';
+import { ContactStatus } from 'src/common/enums/contact-status.enum';
 
 @Injectable()
 export class ContactRepository extends BaseRepository<Contact> {
@@ -21,6 +22,13 @@ export class ContactRepository extends BaseRepository<Contact> {
   async findBySellerId(sellerId: number): Promise<Contact[]> {
     return this.repository.find({
       where: { seller_id: BigInt(sellerId) },
+      relations: ['seller'],
+      order: { created_at: 'DESC' },
+    });
+  }
+  async findByCustomerId(CustomerId: number): Promise<Contact[]> {
+    return this.repository.find({
+      where: { invited_user_id: BigInt(CustomerId), status: ContactStatus.ACCEPTED },
       relations: ['seller'],
       order: { created_at: 'DESC' },
     });

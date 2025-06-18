@@ -103,6 +103,7 @@ export enum LogMessages {
   INVITATION_ACCEPT_FAILED = 'Failed to accept invitation: %s',
 
   INVITATION_FETCH_ATTEMPT = 'Attempting to fetch invitation with identifier: %s',
+  INVITATION_FETCH_ATTEMPT_BY_CUSTOMER = 'Attempting to fetch invitation with customer: %s',
   INVITATION_FETCH_SUCCESS = 'Invitation fetched successfully with identifier: %s',
   INVITATION_FETCH_FAILED = 'Failed to fetch invitation: %s',
   INVITATION_UPDATE_FAILED = 'Failed to update invitation: %s',

@@ -24,7 +24,7 @@ export class ContactService implements IContactUpdate {
     @Inject(InjectionToken.INVITATION_SERVICE)
     private readonly invitationService: IInvitationService,
     private dataSource: DataSource,
-  ) { }
+  ) {}
 
   async create(createContactDto: CreateContactDto): Promise<ApiResponse<Contact>> {
     try {
@@ -221,13 +221,33 @@ export class ContactService implements IContactUpdate {
       });
     }
   }
+  async findByCustomerId(CustomerId: number): Promise<ApiResponse<Contact[]>> {
+    try {
+      this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT, CustomerId);
+      const contacts = await this.contactRepo.findByCustomerId(CustomerId);
+      this.logger.log(LogMessages.CONTACT_FETCH_SUCCESS);
+      return {
+        success: true,
+        message: Messages.CONTACTS_FETCHED,
+        status: HttpStatus.OK,
+        data: contacts,
+      };
+    } catch (error) {
+      this.logger.error(LogMessages.CONTACT_FETCH_FAILED, error);
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      throw new BusinessException(Messages.CONTACT_FETCH_FAILED, 'CONTACT_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
 
   async findAllByInvitedUserId(invitiedUserId: bigint): Promise<Contact[]> {
     try {
       this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT);
 
       const contacts = await this.contactRepo.findByInvitedUserId(invitiedUserId);
-
 
       this.logger.log(LogMessages.CONTACT_FETCH_SUCCESS);
       return contacts;

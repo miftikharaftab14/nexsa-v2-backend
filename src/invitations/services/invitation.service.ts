@@ -26,7 +26,7 @@ export class InvitationService implements IInvitationService {
     @Inject(InjectionToken.INVITATION_STRATEGIES)
     private readonly strategies: IInvitationStrategy[],
     private readonly configService: ConfigService,
-  ) { }
+  ) {}
   private selectStrategy(contact: Contact): IInvitationStrategy {
     // 1. First check if contact has phone number
     if (contact.phone_number) {
@@ -213,14 +213,13 @@ export class InvitationService implements IInvitationService {
         relations: ['contact', 'contact.seller'],
       });
 
-      this.logger.debug("fetching", invites);
+      this.logger.debug('fetching', invites);
 
       if (!invites || invites.length === 0) {
         throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITATION_NOT_FOUND');
       }
 
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, token);
-
 
       return invites;
     } catch (error) {
@@ -249,7 +248,6 @@ export class InvitationService implements IInvitationService {
 
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, phoneNumber);
       return invitation;
-
     } catch (error) {
       this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
       throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
@@ -306,6 +304,35 @@ export class InvitationService implements IInvitationService {
       });
     }
   }
+
+  async getAcceptedInvitationsByCustomerId(customerId: number): Promise<Invitation[]> {
+    try {
+      this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT_BY_CUSTOMER, customerId);
+
+      const invitations = await this.invitationRepo.find({
+        where: {
+          status: InvitationStatus.ACCEPTED,
+          contact: {
+            invited_user_id: BigInt(customerId),
+          },
+        },
+        relations: ['contact', 'contact.seller'],
+        order: { created_at: 'DESC' },
+      });
+
+      this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, customerId);
+      return invitations;
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
+      throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
   async updateInvitationStatusByToken(
     token: string,
     status: InvitationStatus,

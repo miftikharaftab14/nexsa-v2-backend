@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   HttpStatus,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -24,16 +25,20 @@ import {
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { Messages } from 'src/common/enums/messages.enum';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { CurrentUser } from 'src/common/decorators/user.decorator';
 
 @ApiTags('categories')
 @ApiBearerAuth()
 @Controller('categories')
-// @UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@ApiBearerAuth('JWT-auth')
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post()
-  // @Roles(UserRole.SELLER)
+  @Roles(UserRole.SELLER)
   @ApiOperation({ summary: 'Create a new category' })
   @ApiResponse({ status: 201, description: 'Category successfully created' })
   @ApiResponse({ status: 400, description: 'Bad request' })
@@ -49,12 +54,26 @@ export class CategoriesController {
     };
   }
 
+  @Get()
+  @ApiOperation({ summary: 'Get all categories by user id' })
+  @ApiResponse({ status: 200, description: 'Return all categories' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async findAll(@CurrentUser() user: any) {
+    const id = user?.id;
+    const categories = await this.categoriesService.findAll(id);
+    return {
+      success: true,
+      message: Messages.CATEGORIES_FETCHED,
+      status: HttpStatus.OK,
+      data: categories,
+    };
+  }
   @Get('seller/:id')
   @ApiOperation({ summary: 'Get all categories by seller id' })
   @ApiResponse({ status: 200, description: 'Return all categories' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Search term' })
-  async findAll(@Param('id') id: number, @Query('search') search: string) {
+  async findAllbySeller(@Param('id') id: number, @Query('search') search: string) {
     const categories = await this.categoriesService.findAllByUserID(id, search);
     return {
       success: true,

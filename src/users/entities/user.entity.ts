@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { Category } from '../../categories/entities/category.entity';
+import { CategoryAssociation } from '../../categories/entities/category-association.entity';
 
 @Entity('users')
 export class User {
@@ -30,8 +31,8 @@ export class User {
   })
   role: UserRole;
 
-  @OneToMany(() => Category, category => category.user)
-  categories: Category[];
+  @OneToMany(() => CategoryAssociation, categoryAssociation => categoryAssociation.seller)
+  categoryAssociations: CategoryAssociation[];
 
   @Column({ type: 'text', nullable: true })
   profile_picture: string;

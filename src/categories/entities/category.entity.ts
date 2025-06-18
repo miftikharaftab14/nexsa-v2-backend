@@ -3,31 +3,28 @@ import {
   Column,
   PrimaryGeneratedColumn,
   OneToMany,
-  ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
-  JoinColumn,
 } from 'typeorm';
 import { Product } from '../../products/entities/product.entity';
-import { User } from '../../users/entities/user.entity';
+import { CategoryAssociation } from './category-association.entity';
 
 @Entity('categories')
 export class Category {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ name: 'name' })
   name: string;
-
-  @Column({ name: 'user_id' })
-  user_id: number;
-
-  @ManyToOne(() => User, user => user.categories)
-  @JoinColumn({ name: 'user_id' })
-  user: User;
 
   @OneToMany(() => Product, product => product.category)
   products: Product[];
+
+  @OneToMany(() => CategoryAssociation, assoc => assoc.category)
+  associations: CategoryAssociation[];
+
+  @Column({ name: 'system_generated', default: false })
+  systemGenerated: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;

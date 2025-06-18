@@ -257,11 +257,11 @@ export class UserService {
   }
 
   /**
-  * Retrieves a user by their phone number.
-  * @param phoneNumber - The phone number to search for
-  * @returns Promise<User | null> - The found user or null if not found
-  * @throws Error if retrieval fails
-  */
+   * Retrieves a user by their phone number.
+   * @param phoneNumber - The phone number to search for
+   * @returns Promise<User | null> - The found user or null if not found
+   * @throws Error if retrieval fails
+   */
   async findByPhoneAndRole(phoneNumber: string, role: UserRole): Promise<User | null> {
     try {
       this.logger.debug(LogMessages.USER_FETCH_ATTEMPT, `phone: ${phoneNumber}`);

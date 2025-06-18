@@ -16,5 +16,5 @@ export class CreateCategoryDto {
   })
   @IsNotEmpty()
   @IsString()
-  userId: string;
+  sellerId: string;
 }
