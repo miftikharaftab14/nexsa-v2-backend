@@ -35,7 +35,7 @@ export class ProductsService {
     const uploadedFiles = await Promise.all(
       images.map(file => this.fileService.uploadFile(file, 'products')),
     );
-    const mediaUrls = uploadedFiles.map(file => file.url);
+    const mediaUrls = uploadedFiles.map(file => file.key);
 
     // Create product entity
     const product = await this.productsRepository.create({

@@ -12,7 +12,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FileService } from '../services/file.service';
 import { File } from '../entities/file.entity';
-import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiConsumes, ApiBody, ApiOperation, ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('Files')
 @Controller('files')
@@ -66,11 +66,35 @@ export class FileController {
   }
 
   @Get(':id/presigned-url')
+  @ApiOperation({ summary: 'Generate presigned URL using id. `expiresIn` is in seconds.' })
+  @ApiQuery({
+    name: 'expiresIn',
+    required: false,
+    type: Number,
+    description:
+      'Expiration time in seconds for the presigned URL. Default is 3600 seconds (1 hour).',
+  })
   async getPresignedUrl(
     @Param('id', ParseIntPipe) id: number,
     @Query('expiresIn') expiresIn?: number,
   ): Promise<string> {
     return this.fileService.getPresignedUrl(id, expiresIn);
+  }
+
+  @Get(':key/presigned-url-by-key')
+  @ApiOperation({ summary: 'Generate presigned URL using key. `expiresIn` is in seconds.' })
+  @ApiQuery({
+    name: 'expiresIn',
+    required: false,
+    type: Number,
+    description:
+      'Expiration time in seconds for the presigned URL. Default is 3600 seconds (1 hour).',
+  })
+  async getPresignedUrlByKey(
+    @Param('key') key: string,
+    @Query('expiresIn') expiresIn?: number,
+  ): Promise<string> {
+    return this.fileService.getPresignedUrlByKey(key, expiresIn);
   }
 
   @Get(':id/versions')

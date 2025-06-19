@@ -98,6 +98,22 @@ export class CategoriesController {
       data: categories,
     };
   }
+  @Get('customer-preferences')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Get all Preferences categories for client' })
+  @ApiResponse({ status: 200, description: 'Return all categories' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async findAllPreferencesByClient(@CurrentUser() user: CurrentUserType) {
+    const id = user?.userId;
+    const categories = await this.categoriesService.findAllPreferencesByClient(id);
+    return {
+      success: true,
+      message: Messages.CATEGORIES_FETCHED,
+      status: HttpStatus.OK,
+      data: categories,
+    };
+  }
+
   @Get('seller/:id')
   @ApiOperation({ summary: 'Get all categories by seller id' })
   @ApiResponse({ status: 200, description: 'Return all categories' })

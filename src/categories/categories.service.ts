@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { Category } from './entities/category.entity';
 import { UserService } from '../users/services/user.service';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -175,7 +175,79 @@ export class CategoriesService {
       .orWhere('category.systemGenerated = true')
       .getMany();
   }
+  async findAllPreferencesByClient(id: number | bigint) {
+    const user = await this.usersService.findOne(id);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    const acceptedInvitations = await this.invitationService.getAcceptedInvitationsByCustomerId(id);
+    const sellerIds = acceptedInvitations.map(inv => inv.contact?.seller?.id);
 
+    if (sellerIds.length <= 0) {
+      return [];
+    }
+
+    const categoryIds = user.preferences;
+    return this.categoriesRepository
+      .createQueryBuilder('category')
+      .select([
+        'category.id AS category_id',
+        'category.name AS category_name',
+        'category.system_generated AS system_generated',
+        'pc.total_products_count AS total_products_count',
+        `
+    COALESCE(
+      JSON_AGG(
+        JSON_BUILD_OBJECT(
+          'id', lp.id,
+          'name', lp.name,
+          'description', lp.description,
+          'media_urls', lp.media_urls,
+          'created_at', lp.created_at
+        )
+        ORDER BY lp.created_at DESC
+      ) FILTER (WHERE lp.id IS NOT NULL),
+      '[]'
+    ) AS products
+    `,
+      ])
+      .leftJoin('category_associations', 'ca', 'ca.category_id = category.id')
+      .leftJoin('users', 's', 's.id = ca.seller_id')
+      .leftJoin(
+        qb =>
+          qb
+            .select('p.*')
+            .addSelect(
+              'ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY p.created_at DESC)',
+              'row_num',
+            )
+            .from('products', 'p'),
+        'lp',
+        'lp.category_id = category.id AND lp.row_num <= 3',
+      )
+      .leftJoin(
+        qb =>
+          qb
+            .select('p.category_id', 'category_id')
+            .addSelect('COUNT(*)', 'total_products_count')
+            .from('products', 'p')
+            .groupBy('p.category_id'),
+        'pc',
+        'pc.category_id = category.id',
+      )
+      .where('category.id IN (:...categoryIds)', { categoryIds })
+      .andWhere(
+        new Brackets(qb => {
+          qb.where('s.id IN (:...sellerIds)', { sellerIds }).orWhere(
+            'category.system_generated = true',
+          );
+        }),
+      )
+      .andWhere('pc.total_products_count > 0')
+      .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
+      .orderBy('category.id', 'ASC')
+      .getRawMany();
+  }
   async findAllByUserID(userId: number, search?: string): Promise<Category[]> {
     const queryBuilder = this.categoriesRepository
       .createQueryBuilder('category')

@@ -17,6 +17,9 @@ export class FileRepository extends BaseRepository<File> {
   async findOneById(id: number): Promise<File | null> {
     return this.repository.findOne({ where: { id } });
   }
+  async findOneByKey(key: string): Promise<File | null> {
+    return this.repository.findOne({ where: { key } });
+  }
 
   async find(options: FindManyOptions<File> | undefined): Promise<File[]> {
     return this.repository.find(options);

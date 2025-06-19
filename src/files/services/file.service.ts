@@ -108,6 +108,23 @@ export class FileService {
       });
     }
   }
+  async getPresignedUrlByKey(fileKey: string, expiresIn?: number): Promise<string> {
+    try {
+      const file = await this.fileRepository.findOneByKey(fileKey);
+      if (!file) {
+        throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
+      }
+      return this.s3Service.getPresignedUrl(file.key, expiresIn);
+    } catch (error: unknown) {
+      this.logger.error(
+        `Failed to get presigned URL: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND', {
+        error: errorMessage,
+      });
+    }
+  }
 
   async getFileVersions(fileId: number): Promise<File[]> {
     try {
