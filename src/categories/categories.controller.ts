@@ -28,6 +28,7 @@ import { Messages } from 'src/common/enums/messages.enum';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
+import { CurrentUserType } from 'src/common/types/current-user.interface';
 
 @ApiTags('categories')
 @ApiBearerAuth()
@@ -58,9 +59,24 @@ export class CategoriesController {
   @ApiOperation({ summary: 'Get all categories by user id' })
   @ApiResponse({ status: 200, description: 'Return all categories' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async findAll(@CurrentUser() user: any) {
+  async findAll(@CurrentUser() user: CurrentUserType) {
     const id = user?.id;
+
     const categories = await this.categoriesService.findAll(id);
+    return {
+      success: true,
+      message: Messages.CATEGORIES_FETCHED,
+      status: HttpStatus.OK,
+      data: categories,
+    };
+  }
+  @Get('preferences')
+  @ApiOperation({ summary: 'Get all Preferences by user id' })
+  @ApiResponse({ status: 200, description: 'Return all categories' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async findAllPreferences(@CurrentUser() user: CurrentUserType) {
+    const id = user?.id;
+    const categories = await this.categoriesService.findAllPreferences(id);
     return {
       success: true,
       message: Messages.CATEGORIES_FETCHED,

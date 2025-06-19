@@ -104,6 +104,41 @@ export class CategoriesService {
       .orWhere('category.systemGenerated = true')
       .getMany();
   }
+  async findAllPreferences(id: number): Promise<Category[]> {
+    const user = await this.usersService.findOne(id);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    let sellerIds: bigint[] = [];
+
+    if (user.role === UserRole.SELLER) {
+      sellerIds = [user.id];
+    } else {
+      const acceptedInvitations =
+        await this.invitationService.getAcceptedInvitationsByCustomerId(id);
+
+      sellerIds = acceptedInvitations.map(inv => inv.contact?.seller?.id);
+    }
+
+    // If no seller IDs are found (e.g., no invitations), return only system-generated categories
+    if (sellerIds.length === 0) {
+      return this.categoriesRepository.find({
+        where: { systemGenerated: true },
+        relations: ['products'],
+      });
+    }
+
+    // Fetch categories for the relevant sellers + system-generated ones
+    return this.categoriesRepository
+      .createQueryBuilder('category')
+      .distinct(true)
+      .leftJoinAndSelect('category.associations', 'association')
+      .leftJoinAndSelect('association.seller', 'seller')
+      .where('seller.id IN (:...sellerIds)', { sellerIds })
+      .orWhere('category.systemGenerated = true')
+      .getMany();
+  }
 
   async findAllByUserID(userId: number, search?: string): Promise<Category[]> {
     const queryBuilder = this.categoriesRepository
