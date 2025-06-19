@@ -91,8 +91,9 @@ export class UserService {
    * @returns Promise<User | null> - The found user or null if not found
    * @throws Error if retrieval fails
    */
-  async findOne(id: number): Promise<User | null> {
+  async findOne(id: number | bigint): Promise<User | null> {
     try {
+      if (!id) return null;
       this.logger.debug(LogMessages.USER_FETCH_ATTEMPT, id);
       const user = await this.userRepo.findOneById(id);
       if (!user) {

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from './entities/category.entity';
@@ -68,43 +73,71 @@ export class CategoriesService {
     return savedCategory;
   }
 
-  async findAll(id: number): Promise<Category[]> {
-    const user = await this.usersService.findOne(id);
+  async findAllbySellerId(sellerId: number | bigint, userId: number | bigint): Promise<Category[]> {
+    const usersRelationVarification = await this.invitationService.verifyCustomerSellerRelation(
+      userId,
+      sellerId,
+    );
+    if (!usersRelationVarification) {
+      throw new ForbiddenException('Unauthorized: you are not allowed to fetch this data.');
+    }
+    const user = await this.usersService.findOne(sellerId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw new NotFoundException(`User with ID ${sellerId} not found`);
     }
 
-    let sellerIds: bigint[] = [];
-
-    if (user.role === UserRole.SELLER) {
-      sellerIds = [user.id];
-    } else {
-      const acceptedInvitations =
-        await this.invitationService.getAcceptedInvitationsByCustomerId(id);
-
-      sellerIds = acceptedInvitations.map(inv => inv.contact?.seller?.id);
-    }
-
-    // If no seller IDs are found (e.g., no invitations), return only system-generated categories
-    if (sellerIds.length === 0) {
-      return this.categoriesRepository.find({
-        where: { systemGenerated: true },
-        relations: ['products'],
-      });
-    }
-
-    // Fetch categories for the relevant sellers + system-generated ones
     return this.categoriesRepository
       .createQueryBuilder('category')
-      .distinct(true)
-      .leftJoinAndSelect('category.products', 'product')
-      .leftJoinAndSelect('category.associations', 'association')
-      .leftJoinAndSelect('association.seller', 'seller')
-      .where('seller.id IN (:...sellerIds)', { sellerIds })
-      .orWhere('category.systemGenerated = true')
-      .getMany();
+      .select([
+        'category.id AS category_id',
+        'category.name AS category_name',
+        'category.system_generated AS system_generated',
+        'pc.total_products_count AS total_products_count',
+        `
+    COALESCE(
+      JSON_AGG(
+        JSON_BUILD_OBJECT(
+          'product_id', lp.id,
+          'product_name', lp.name,
+          'product_created_at', lp.created_at
+        )
+        ORDER BY lp.created_at DESC
+      ) FILTER (WHERE lp.id IS NOT NULL),
+      '[]'
+    ) AS products
+    `,
+      ])
+      .leftJoin('category_associations', 'ca', 'ca.category_id = category.id')
+      .leftJoin('users', 's', 's.id = ca.seller_id')
+      .leftJoin(
+        qb =>
+          qb
+            .select('p.*')
+            .addSelect(
+              'ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY p.created_at DESC)',
+              'row_num',
+            )
+            .from('products', 'p'),
+        'lp',
+        'lp.category_id = category.id AND lp.row_num <= 3',
+      )
+      .leftJoin(
+        qb =>
+          qb
+            .select('p.category_id', 'category_id')
+            .addSelect('COUNT(*)', 'total_products_count')
+            .from('products', 'p')
+            .groupBy('p.category_id'),
+        'pc',
+        'pc.category_id = category.id',
+      )
+      .where('s.id = :sellerId', { sellerId })
+      .orWhere('category.system_generated = true')
+      .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
+      .orderBy('category.id', 'ASC')
+      .getRawMany();
   }
-  async findAllPreferences(id: number): Promise<Category[]> {
+  async findAllPreferences(id: number | bigint): Promise<Category[]> {
     const user = await this.usersService.findOne(id);
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);

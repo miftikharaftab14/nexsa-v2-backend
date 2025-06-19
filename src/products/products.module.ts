@@ -6,9 +6,10 @@ import { ProductsController } from './products.controller';
 import { CategoriesModule } from '../categories/categories.module';
 import { FilesModule } from '../files/files.module';
 import { ProductRepository } from './repository/product.repository';
+import { UserModule } from 'src/users/user.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Product]), CategoriesModule, FilesModule],
+  imports: [TypeOrmModule.forFeature([Product]), CategoriesModule, FilesModule, UserModule],
   providers: [ProductsService, ProductRepository],
   controllers: [ProductsController],
   exports: [ProductsService],

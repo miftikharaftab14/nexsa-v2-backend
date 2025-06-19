@@ -1,4 +1,4 @@
 export interface CurrentUserType {
-  id: number;
+  userId: bigint;
   role: string;
 }

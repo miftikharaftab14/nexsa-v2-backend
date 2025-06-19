@@ -31,6 +31,9 @@ export class ProductRepository extends BaseRepository<Product> {
   async findAll(): Promise<Product[]> {
     return this.repository.find({ relations: ['category'] });
   }
+  async findAllBySeller(userId: bigint): Promise<Product[]> {
+    return this.repository.find({ where: { userId }, relations: ['category'] });
+  }
   async findbyId(id: number): Promise<Product[]> {
     return this.repository.find({
       where: { id },

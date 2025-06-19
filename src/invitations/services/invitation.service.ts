@@ -305,7 +305,40 @@ export class InvitationService implements IInvitationService {
     }
   }
 
-  async getAcceptedInvitationsByCustomerId(customerId: number): Promise<Invitation[]> {
+  async verifyCustomerSellerRelation(
+    customerId: number | bigint,
+    sellerId: number | bigint,
+  ): Promise<boolean> {
+    try {
+      this.logger.debug('customer verification start', customerId);
+      if (customerId == sellerId) {
+        return true;
+      }
+      const invitation = await this.invitationRepo.findOne({
+        where: {
+          status: InvitationStatus.ACCEPTED,
+          seller: { id: BigInt(sellerId) },
+          contact: {
+            invited_user_id: BigInt(customerId),
+          },
+        },
+      });
+      if (invitation) {
+        return true;
+      }
+      this.logger.log('Verification complete', customerId);
+      return false;
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
+      throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+  async getAcceptedInvitationsByCustomerId(customerId: number | bigint): Promise<Invitation[]> {
     try {
       this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT_BY_CUSTOMER, customerId);
 

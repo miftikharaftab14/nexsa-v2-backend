@@ -14,7 +14,7 @@ export abstract class BaseRepository<T extends ObjectLiteral> {
     return this.repository.find();
   }
 
-  findOneById(id: number | string): Promise<T | null> {
+  findOneById(id: number | string | bigint): Promise<T | null> {
     return this.repository.findOneBy({ id } as any);
   }
 

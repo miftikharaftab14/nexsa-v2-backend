@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   Delete,
-  Query,
   ParseIntPipe,
   UseInterceptors,
   UploadedFiles,
@@ -33,6 +32,8 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { Roles } from 'src/auth/decorators/roles.decorator';
+import { CurrentUserType } from 'src/common/types/current-user.interface';
+import { CurrentUser } from 'src/common/decorators/user.decorator';
 
 @ApiTags('products')
 @ApiBearerAuth()
@@ -43,6 +44,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
+  @Roles(UserRole.SELLER)
   @UseInterceptors(FilesInterceptor('images', 10)) // Max 10 files
   @ApiOperation({ summary: 'Create product with multiple images' })
   @ApiConsumes('multipart/form-data')
@@ -67,6 +69,7 @@ export class ProductsController {
   @ApiResponse({ status: 201, description: 'Product created successfully' })
   async createProduct(
     @Body() createProductDto: CreateProductDto,
+    @CurrentUser() currentUser: CurrentUserType,
     @UploadedFiles(
       new ParseFilePipe({
         validators: [
@@ -78,7 +81,11 @@ export class ProductsController {
     )
     images: Express.Multer.File[],
   ) {
-    const result = await this.productsService.createProduct(createProductDto, images || []);
+    const result = await this.productsService.createProduct(
+      createProductDto,
+      images || [],
+      currentUser.userId,
+    );
     return {
       success: true,
       message: Messages.PRODUCT_CREATED,
@@ -90,8 +97,8 @@ export class ProductsController {
   @Get()
   @Roles(UserRole.SELLER)
   @ApiOperation({ summary: 'get products for seller' })
-  async findAll() {
-    const result = await this.productsService.findAll();
+  async findAll(@CurrentUser() currentUser: CurrentUserType) {
+    const result = await this.productsService.findAllBySeller(currentUser.userId);
     return {
       success: true,
       message: Messages.PRODUCTS_FETCHED,

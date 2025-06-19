@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, UnauthorizedException } from '@nestjs/common';
 import { ProductRepository } from './repository/product.repository';
 import { CategoriesService } from '../categories/categories.service';
 import { InjectionToken } from '../common/constants/injection-tokens';
@@ -6,17 +6,28 @@ import { FileService } from '../files/services/file.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { Product } from './entities/product.entity';
 import { Category } from 'src/categories/entities/category.entity';
+import { UserService } from 'src/users/services/user.service';
 
 @Injectable()
 export class ProductsService {
   constructor(
     private readonly productsRepository: ProductRepository,
     private readonly categoriesService: CategoriesService,
+    private readonly userService: UserService,
+
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
   ) {}
 
-  async createProduct(dto: CreateProductDto, images: Express.Multer.File[]): Promise<Product> {
+  async createProduct(
+    dto: CreateProductDto,
+    images: Express.Multer.File[],
+    sellerId: number | bigint,
+  ): Promise<Product> {
+    const user = await this.userService.findOne(sellerId);
+    if (!user) {
+      throw new UnauthorizedException(`User with ID ${sellerId} not found`);
+    }
     // Validate category exists
     const category: Category = await this.categoriesService.findOne(dto.categoryId);
 
@@ -31,13 +42,18 @@ export class ProductsService {
       name: dto.name,
       description: dto.description || '',
       category,
+      userId: user.id,
       mediaUrls,
     });
     return product;
   }
 
-  async findAll(): Promise<Product[]> {
-    return this.productsRepository.findAll();
+  async findAllBySeller(sellerId: number | bigint): Promise<Product[]> {
+    const user = await this.userService.findOne(sellerId);
+    if (!user) {
+      throw new UnauthorizedException(`User with ID ${sellerId} not found`);
+    }
+    return this.productsRepository.findAllBySeller(user.id);
   }
 
   async findOne(id: number): Promise<Product> {
@@ -80,14 +96,18 @@ export class ProductsService {
     }
 
     // Prepare update data
-    const updateData: any = {
+    const updateData: Partial<Product> = {
       ...updateProductDto,
       mediaUrls,
     };
 
     // Map categoryId to category relation
     if (updateProductDto.categoryId) {
-      updateData.category = { id: updateProductDto.categoryId };
+      const category = await this.categoriesService.findOne(updateProductDto.categoryId);
+      if (!category) {
+        throw new NotFoundException(`Category with ID ${id} not found`);
+      }
+      updateData.category = category;
       delete updateData.categoryId;
     }
 

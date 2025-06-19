@@ -7,8 +7,8 @@ import {
   OneToMany,
 } from 'typeorm';
 import { UserRole } from '../../common/enums/user-role.enum';
-import { Category } from '../../categories/entities/category.entity';
 import { CategoryAssociation } from '../../categories/entities/category-association.entity';
+import { Product } from '../../products/entities/product.entity';
 
 @Entity('users')
 export class User {
@@ -33,6 +33,9 @@ export class User {
 
   @OneToMany(() => CategoryAssociation, categoryAssociation => categoryAssociation.seller)
   categoryAssociations: CategoryAssociation[];
+
+  @OneToMany(() => Product, product => product.user)
+  products: Product[];
 
   @Column({ type: 'text', nullable: true })
   profile_picture: string;

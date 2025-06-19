@@ -56,13 +56,27 @@ export class CategoriesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all categories by user id' })
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Get all categories for sellers' })
   @ApiResponse({ status: 200, description: 'Return all categories' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async findAll(@CurrentUser() user: CurrentUserType) {
-    const id = user?.id;
+    const id = user?.userId;
 
-    const categories = await this.categoriesService.findAll(id);
+    const categories = await this.categoriesService.findAllbySellerId(id, id);
+    return {
+      success: true,
+      message: Messages.CATEGORIES_FETCHED,
+      status: HttpStatus.OK,
+      data: categories,
+    };
+  }
+  @Get('by-seller/:id')
+  @ApiOperation({ summary: 'Get all categories by Seller id' })
+  @ApiResponse({ status: 200, description: 'Return all categories' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async findbySellerId(@Param('id') id: number, @CurrentUser() user: CurrentUserType) {
+    const categories = await this.categoriesService.findAllbySellerId(id, user.userId);
     return {
       success: true,
       message: Messages.CATEGORIES_FETCHED,
@@ -75,7 +89,7 @@ export class CategoriesController {
   @ApiResponse({ status: 200, description: 'Return all categories' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async findAllPreferences(@CurrentUser() user: CurrentUserType) {
-    const id = user?.id;
+    const id = user?.userId;
     const categories = await this.categoriesService.findAllPreferences(id);
     return {
       success: true,
