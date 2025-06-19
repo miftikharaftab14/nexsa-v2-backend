@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
@@ -11,6 +12,8 @@ import { UserService } from '../users/services/user.service';
 import { UserRole } from '../common/enums/user-role.enum';
 import { CategoryAssociation } from './entities/category-association.entity';
 import { InvitationService } from 'src/invitations/services/invitation.service';
+import { FileService } from 'src/files/services/file.service';
+import { InjectionToken } from 'src/common/constants/injection-tokens';
 
 @Injectable()
 export class CategoriesService {
@@ -21,7 +24,26 @@ export class CategoriesService {
     private categoriesAss: Repository<CategoryAssociation>,
     private readonly usersService: UserService,
     private readonly invitationService: InvitationService,
+    @Inject(InjectionToken.FILE_SERVICE)
+    private readonly fileService: FileService,
   ) {}
+  async convertProductsPresignedUrl(categories: Category[]) {
+    return await Promise.all(
+      categories.map(async category => ({
+        ...category,
+        products: await Promise.all(
+          category.products.map(async product => ({
+            ...product,
+            mediaUrls: await Promise.all(
+              (product.mediaUrls ?? []).map(url =>
+                this.fileService.getPresignedUrlByKey(url, 3600),
+              ),
+            ),
+          })),
+        ),
+      })),
+    );
+  }
 
   async create(createCategoryDto: { name: string; sellerId: string }): Promise<Category> {
     // Verify the user exists and is a seller
@@ -86,7 +108,7 @@ export class CategoriesService {
       throw new NotFoundException(`User with ID ${sellerId} not found`);
     }
 
-    return this.categoriesRepository
+    const categories: Category[] = await this.categoriesRepository
       .createQueryBuilder('category')
       .select([
         'category.id AS category_id',
@@ -100,7 +122,7 @@ export class CategoriesService {
           'id', lp.id,
           'name', lp.name,
           'description', lp.description,
-          'media_urls', lp.media_urls,
+          'mediaUrls', lp.media_urls,
           'created_at', lp.created_at,
           'updated_at', lp.updated_at
         )
@@ -139,6 +161,7 @@ export class CategoriesService {
       .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
       .orderBy('category.id', 'ASC')
       .getRawMany();
+    return this.convertProductsPresignedUrl(categories);
   }
   async findAllPreferences(id: number | bigint): Promise<Category[]> {
     const user = await this.usersService.findOne(id);
@@ -165,8 +188,7 @@ export class CategoriesService {
       });
     }
 
-    // Fetch categories for the relevant sellers + system-generated ones
-    return this.categoriesRepository
+    const categories: Category[] = await this.categoriesRepository
       .createQueryBuilder('category')
       .distinct(true)
       .leftJoinAndSelect('category.associations', 'association')
@@ -174,6 +196,7 @@ export class CategoriesService {
       .where('seller.id IN (:...sellerIds)', { sellerIds })
       .orWhere('category.systemGenerated = true')
       .getMany();
+    return this.convertProductsPresignedUrl(categories);
   }
   async findAllPreferencesByClient(id: number | bigint) {
     const user = await this.usersService.findOne(id);
@@ -188,7 +211,7 @@ export class CategoriesService {
     }
 
     const categoryIds = user.preferences;
-    return this.categoriesRepository
+    const categories: Category[] = await this.categoriesRepository
       .createQueryBuilder('category')
       .select([
         'category.id AS category_id',
@@ -202,7 +225,7 @@ export class CategoriesService {
           'id', lp.id,
           'name', lp.name,
           'description', lp.description,
-          'media_urls', lp.media_urls,
+          'mediaUrls', lp.media_urls,
           'created_at', lp.created_at
         )
         ORDER BY lp.created_at DESC
@@ -247,6 +270,7 @@ export class CategoriesService {
       .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
       .orderBy('category.id', 'ASC')
       .getRawMany();
+    return this.convertProductsPresignedUrl(categories);
   }
   async findAllByUserID(userId: number, search?: string): Promise<Category[]> {
     const queryBuilder = this.categoriesRepository
