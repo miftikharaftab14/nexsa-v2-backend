@@ -97,9 +97,12 @@ export class CategoriesService {
     COALESCE(
       JSON_AGG(
         JSON_BUILD_OBJECT(
-          'product_id', lp.id,
-          'product_name', lp.name,
-          'product_created_at', lp.created_at
+          'id', lp.id,
+          'name', lp.name,
+          'description', lp.description,
+          'media_urls', lp.media_urls,
+          'created_at', lp.created_at,
+          'updated_at', lp.updated_at
         )
         ORDER BY lp.created_at DESC
       ) FILTER (WHERE lp.id IS NOT NULL),
@@ -131,8 +134,8 @@ export class CategoriesService {
         'pc',
         'pc.category_id = category.id',
       )
-      .where('s.id = :sellerId', { sellerId })
-      .orWhere('category.system_generated = true')
+      .where('(s.id = :sellerId OR category.system_generated = true)', { sellerId })
+      .andWhere('pc.total_products_count > 0')
       .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
       .orderBy('category.id', 'ASC')
       .getRawMany();
