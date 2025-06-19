@@ -22,6 +22,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -94,11 +95,13 @@ export class ProductsController {
     };
   }
 
-  @Get()
-  @Roles(UserRole.SELLER)
-  @ApiOperation({ summary: 'get products for seller' })
-  async findAll(@CurrentUser() currentUser: CurrentUserType) {
-    const result = await this.productsService.findAllBySeller(currentUser.userId);
+  @ApiTags('Products') // optional, adds grouping in Swagger UI
+  @Get('all/:categoryId/:sellerId')
+  @ApiOperation({ summary: 'Get products by seller and category ID' })
+  @ApiParam({ name: 'categoryId', type: Number, description: 'Category ID' })
+  @ApiParam({ name: 'sellerId', type: Number, description: 'Seller ID' })
+  async findAll(@Param('categoryId') categoryId: number, @Param('sellerId') sellerId: number) {
+    const result = await this.productsService.findAllBySeller(sellerId, categoryId);
     return {
       success: true,
       message: Messages.PRODUCTS_FETCHED,

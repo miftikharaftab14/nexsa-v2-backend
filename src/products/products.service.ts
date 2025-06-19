@@ -18,6 +18,16 @@ export class ProductsService {
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
   ) {}
+  async convertProductListPresignedUrls(products: Product[]) {
+    return await Promise.all(
+      products.map(async product => ({
+        ...product,
+        mediaUrls: await Promise.all(
+          (product.mediaUrls ?? []).map(url => this.fileService.getPresignedUrlByKey(url, 3600)),
+        ),
+      })),
+    );
+  }
 
   async createProduct(
     dto: CreateProductDto,
@@ -48,12 +58,13 @@ export class ProductsService {
     return product;
   }
 
-  async findAllBySeller(sellerId: number | bigint): Promise<Product[]> {
+  async findAllBySeller(sellerId: number | bigint, categoryId: number): Promise<Product[]> {
     const user = await this.userService.findOne(sellerId);
     if (!user) {
       throw new UnauthorizedException(`User with ID ${sellerId} not found`);
     }
-    return this.productsRepository.findAllBySeller(user.id);
+    const products = await this.productsRepository.findAllBySeller(user.id, categoryId);
+    return this.convertProductListPresignedUrls(products);
   }
 
   async findOne(id: number): Promise<Product> {
