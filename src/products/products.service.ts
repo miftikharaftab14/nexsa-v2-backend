@@ -14,6 +14,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { Product } from './entities/product.entity';
 import { Category } from 'src/categories/entities/category.entity';
 import { UserService } from 'src/users/services/user.service';
+import { UpdateProductDto } from './dto/update-product.dto';
 
 @Injectable()
 export class ProductsService {
@@ -121,56 +122,52 @@ export class ProductsService {
 
   async update(
     id: number,
-    updateProductDto: {
-      name?: string;
-      mediaUrls?: string[];
-      categoryId?: number;
-      files?: Express.Multer.File[];
-      description?: string;
-    },
+    updateProductDto: UpdateProductDto,
+    images?: Express.Multer.File[],
   ): Promise<Product> {
     try {
-      this.logger.debug('Attempting to update product', String(id));
+      console.log({ updateProductDto });
+
+      this.logger.debug(`Attempting to update product with ID: ${id}`);
+
       // Ensure product exists
       const product = await this.findOne(id);
-
-      // Validate category if categoryId provided
-      if (updateProductDto.categoryId) {
-        await this.categoriesService.findOne(updateProductDto.categoryId);
+      if (!product) {
+        throw new NotFoundException(`Product with ID ${id} not found`);
       }
 
-      // Prepare media URLs: start from existing or from DTO
+      // Prepare media URLs
       let mediaUrls = updateProductDto.mediaUrls || product.mediaUrls || [];
 
-      // Upload new files if provided
-      if (updateProductDto.files && updateProductDto.files.length > 0) {
+      // Upload new images if provided
+      if (images && images.length > 0) {
         const uploadedFiles = await Promise.all(
-          updateProductDto.files.map(file => this.fileService.uploadFile(file, 'products')),
+          images.map(file => this.fileService.uploadFile(file, 'products')),
         );
-        mediaUrls = [...mediaUrls, ...uploadedFiles.map(file => file.url)];
+        mediaUrls = [...mediaUrls, ...uploadedFiles.map(file => file.key)];
       }
 
-      // Prepare update data
       const updateData: Partial<Product> = {
         ...updateProductDto,
         mediaUrls,
       };
 
-      // Map categoryId to category relation
+      // Handle category relation
       if (updateProductDto.categoryId) {
         const category = await this.categoriesService.findOne(updateProductDto.categoryId);
         if (!category) {
-          throw new NotFoundException(`Category with ID ${id} not found`);
+          throw new NotFoundException(`Category with ID ${updateProductDto.categoryId} not found`);
         }
         updateData.category = category;
         delete updateData.categoryId;
       }
 
       await this.productsRepository.update(id, updateData);
-      this.logger.log('Product updated successfully', String(id));
+      this.logger.log(`Product with ID ${id} updated successfully`);
+
       return this.findOne(id);
     } catch (error) {
-      this.logger.error('Failed to update product', error);
+      this.logger.error(`Failed to update product with ID ${id}`, error);
       throw error instanceof NotFoundException
         ? error
         : new InternalServerErrorException('Failed to update product');

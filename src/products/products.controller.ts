@@ -14,6 +14,7 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
   UseGuards,
+  ValidationPipe,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -36,6 +37,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { CurrentUserType } from 'src/common/types/current-user.interface';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { ProductLikeService } from './products-like.service';
+import { UpdateProductDto } from './dto/update-product.dto';
 
 @ApiTags('products') // Swagger group
 @ApiBearerAuth() // Apply JWT auth header globally
@@ -212,18 +214,48 @@ export class ProductsController {
    * Update a product by ID
    */
   @Patch(':id')
+  @UseInterceptors(FilesInterceptor('images', 10)) // Accept up to 10 image files
   @ApiOperation({ summary: 'Update product by ID' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', example: 'Nike Air Max' },
+        description: { type: 'string', example: 'Stylish and comfortable running shoes' },
+        categoryId: { type: 'number', example: 1 },
+        mediaUrls: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional: product images',
+        },
+        images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Optional: Multiple product images',
+        },
+      },
+      required: ['name', 'description', 'categoryId'], // images not required
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Product updated successfully' })
   @ApiParam({ name: 'id', type: Number, description: 'Product ID' })
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body()
-    updateProductDto: {
-      name?: string;
-      mediaUrls?: string[];
-      categoryId?: number;
-    },
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false }))
+    updateProductDto: UpdateProductDto,
+    @UploadedFiles(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: FileSize.PRODUCT_IMAGE }),
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png)$/ }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    images?: Express.Multer.File[],
   ) {
-    const result = await this.productsService.update(id, updateProductDto);
+    const result = await this.productsService.update(id, updateProductDto, images);
     return {
       success: true,
       message: Messages.PRODUCT_UPDATED,
