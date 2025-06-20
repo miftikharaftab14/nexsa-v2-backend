@@ -124,7 +124,14 @@ export class CategoriesService {
           'description', lp.description,
           'mediaUrls', lp.media_urls,
           'created_at', lp.created_at,
-          'updated_at', lp.updated_at
+          'updated_at', lp.updated_at,
+          'liked', (
+            SELECT EXISTS (
+              SELECT 1
+              FROM product_likes pl
+              WHERE pl.product_id = lp.id AND pl.customer_id = :userId
+            )
+          )
         )
         ORDER BY lp.created_at DESC
       ) FILTER (WHERE lp.id IS NOT NULL),
@@ -162,6 +169,7 @@ export class CategoriesService {
       .andWhere('pc.total_products_count > 0')
       .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
       .orderBy('category.id', 'ASC')
+      .setParameter('userId', userId)
       .getRawMany();
 
     return this.convertProductsPresignedUrl(categories);
@@ -228,7 +236,14 @@ export class CategoriesService {
           'name', lp.name,
           'description', lp.description,
           'mediaUrls', lp.media_urls,
-          'created_at', lp.created_at
+          'created_at', lp.created_at,
+          'liked', (
+            SELECT EXISTS (
+              SELECT 1
+              FROM product_likes pl
+              WHERE pl.product_id = lp.id AND pl.customer_id = :userId
+            )
+          )
         )
         ORDER BY lp.created_at DESC
       ) FILTER (WHERE lp.id IS NOT NULL),
@@ -273,6 +288,7 @@ export class CategoriesService {
       .andWhere('pc.total_products_count > 0')
       .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
       .orderBy('category.id', 'ASC')
+      .setParameter('userId', id)
       .getRawMany();
 
     return this.convertProductsPresignedUrl(categories);
