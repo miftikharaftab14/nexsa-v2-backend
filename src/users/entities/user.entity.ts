@@ -9,6 +9,7 @@ import {
 import { UserRole } from '../../common/enums/user-role.enum';
 import { CategoryAssociation } from '../../categories/entities/category-association.entity';
 import { Product } from '../../products/entities/product.entity';
+import { ProductLike } from '../../products/entities/product-like.entity';
 
 @Entity('users')
 export class User {
@@ -30,6 +31,9 @@ export class User {
     default: UserRole.CUSTOMER,
   })
   role: UserRole;
+
+  @OneToMany(() => ProductLike, like => like.customer)
+  likes: ProductLike[];
 
   @OneToMany(() => CategoryAssociation, categoryAssociation => categoryAssociation.seller)
   categoryAssociations: CategoryAssociation[];

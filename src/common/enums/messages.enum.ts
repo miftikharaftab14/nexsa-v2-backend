@@ -93,4 +93,9 @@ export enum Messages {
   PRODUCT_FETCHED = 'Product fetched successfully',
   PRODUCTS_FETCHED = 'Products fetched successfully',
   PRODUCT_NOT_FOUND = 'Product not found',
+
+  PRODUCTS_LIKED = 'Products liked successfully',
+  PRODUCTS_UNLIKED = 'Products unliked successfully',
+  PRODUCTS_LIKES_FETCHED = 'Products likes fetched successfully',
+  PRODUCTS_LIKE_FETCHED = 'Products like fetched successfully',
 }

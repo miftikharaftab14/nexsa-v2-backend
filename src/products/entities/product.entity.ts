@@ -3,12 +3,14 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
 import { User } from '../../users/entities/user.entity';
+import { ProductLike } from './product-like.entity'; // ⬅️ Import the like entity
 
 @Entity('products')
 export class Product {
@@ -37,6 +39,9 @@ export class Product {
   @ManyToOne(() => User, user => user.products)
   @JoinColumn({ name: 'user_id' })
   user: User;
+
+  @OneToMany(() => ProductLike, like => like.product, { cascade: true }) // ⬅️ Added this
+  likes: ProductLike[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

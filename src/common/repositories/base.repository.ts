@@ -10,8 +10,8 @@ export abstract class BaseRepository<T extends ObjectLiteral> {
     this.repository = this.dataSource.getRepository(this.entity);
   }
 
-  findAll(): Promise<T[]> {
-    return this.repository.find();
+  findAll(options?: any): Promise<T[]> {
+    return this.repository.find(options);
   }
 
   findOneById(id: number | string | bigint): Promise<T | null> {

@@ -7,11 +7,19 @@ import { CategoriesModule } from '../categories/categories.module';
 import { FilesModule } from '../files/files.module';
 import { ProductRepository } from './repository/product.repository';
 import { UserModule } from 'src/users/user.module';
+import { ProductLike } from './entities/product-like.entity';
+import { ProductLikeRepository } from './repository/product-like.repository';
+import { ProductLikeService } from './products-like.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Product]), CategoriesModule, FilesModule, UserModule],
-  providers: [ProductsService, ProductRepository],
+  imports: [
+    TypeOrmModule.forFeature([Product, ProductLike]),
+    CategoriesModule,
+    FilesModule,
+    UserModule,
+  ],
+  providers: [ProductsService, ProductRepository, ProductLikeService, ProductLikeRepository],
   controllers: [ProductsController],
-  exports: [ProductsService],
+  exports: [ProductsService, ProductLikeService],
 })
 export class ProductsModule {}
