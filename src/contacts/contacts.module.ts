@@ -5,9 +5,10 @@ import { ContactService } from './services/contact.service';
 import { ContactRepository } from './repositories/contact.repository';
 import { Contact } from './entities/contact.entity';
 import { InvitationsModule } from 'src/invitations/invitations.module';
+import { FilesModule } from 'src/files/files.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Contact]), InvitationsModule],
+  imports: [TypeOrmModule.forFeature([Contact]), InvitationsModule, FilesModule],
   controllers: [ContactController],
   providers: [ContactService, ContactRepository],
   exports: [ContactService, ContactRepository],

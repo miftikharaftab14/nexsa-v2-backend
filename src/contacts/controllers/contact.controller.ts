@@ -28,6 +28,10 @@ import {
 import { Contact } from '../entities/contact.entity';
 import { ApiResponse as CustomApiResponse } from 'src/common/interfaces/api-response.interface';
 import { Messages } from 'src/common/enums/messages.enum';
+import { CurrentUser } from 'src/common/decorators/user.decorator';
+import { CurrentUserType } from 'src/common/types/current-user.interface';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { UserRole } from 'src/common/enums/user-role.enum';
 
 @ApiTags('Contacts')
 @Controller('contacts')
@@ -62,6 +66,13 @@ export class ContactController {
       status: HttpStatus.OK,
       data: contacts,
     };
+  }
+  @Get('get-sellers')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Get all accepted sellers invited by the logged-in customer' })
+  @ApiResponse(_200_contacts)
+  async findAllSelelrsByCustomer(@CurrentUser() user: CurrentUserType) {
+    return this.contactService.findAllSelelrsByCustomer(user.userId);
   }
 
   @Get(':id')

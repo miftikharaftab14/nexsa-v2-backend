@@ -14,6 +14,8 @@ import { IInvitationService } from 'src/invitations/interfaces/contact-invitatio
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { DataSource } from 'typeorm';
 import { IContactUpdate } from '../interfaces/IContactUpdate.interface';
+import { SellerInfoType } from '../types/sellers-info-interface';
+import { FileService } from 'src/files/services/file.service';
 
 @Injectable()
 export class ContactService implements IContactUpdate {
@@ -24,6 +26,9 @@ export class ContactService implements IContactUpdate {
     @Inject(InjectionToken.INVITATION_SERVICE)
     private readonly invitationService: IInvitationService,
     private dataSource: DataSource,
+
+    @Inject(InjectionToken.FILE_SERVICE)
+    private readonly fileService: FileService,
   ) {}
 
   async create(createContactDto: CreateContactDto): Promise<ApiResponse<Contact>> {
@@ -72,6 +77,38 @@ export class ContactService implements IContactUpdate {
         message: Messages.CONTACTS_FETCHED,
         status: HttpStatus.OK,
         data: contacts,
+      };
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(LogMessages.CONTACT_FETCH_FAILED, error);
+      throw new BusinessException(Messages.CONTACT_FETCH_FAILED, 'CONTACT_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+  async findAllSelelrsByCustomer(customerId: bigint): Promise<ApiResponse<SellerInfoType[]>> {
+    try {
+      this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT);
+      const contacts = await this.contactRepo.findAllSelelrsByCustomer(customerId);
+      console.log({ contacts });
+
+      this.logger.log(LogMessages.CONTACT_FETCH_SUCCESS);
+      const enrichedContacts = await Promise.all(
+        contacts.map(async contact => ({
+          ...contact,
+          profile_picture: contact.profile_picture
+            ? await this.fileService.getPresignedUrl(Number(contact.profile_picture))
+            : null,
+        })),
+      );
+
+      return {
+        success: true,
+        message: Messages.CONTACTS_FETCHED,
+        status: HttpStatus.OK,
+        data: enrichedContacts,
       };
     } catch (error) {
       if (error instanceof BusinessException) {

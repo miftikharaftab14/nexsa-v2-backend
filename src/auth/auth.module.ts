@@ -17,6 +17,7 @@ import { InvitationsModule } from 'src/invitations/invitations.module';
 import { ContactService } from 'src/contacts/services/contact.service';
 import { ContactsModule } from 'src/contacts/contacts.module';
 import { TwilioVerifyService } from 'src/common/services/twilio-verify.service';
+import { FilesModule } from 'src/files/files.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { TwilioVerifyService } from 'src/common/services/twilio-verify.service';
     UserModule,
     InvitationsModule,
     ContactsModule,
+    FilesModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -51,6 +53,12 @@ import { TwilioVerifyService } from 'src/common/services/twilio-verify.service';
       useClass: ContactService,
     },
   ],
-  exports: [RolesGuard, AuthService, TwilioService, TwilioVerifyService, InjectionToken.CONTACT_SERVICE],
+  exports: [
+    RolesGuard,
+    AuthService,
+    TwilioService,
+    TwilioVerifyService,
+    InjectionToken.CONTACT_SERVICE,
+  ],
 })
-export class AuthModule { }
+export class AuthModule {}

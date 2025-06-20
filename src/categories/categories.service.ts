@@ -32,7 +32,7 @@ export class CategoriesService {
       categories.map(async category => ({
         ...category,
         products: await Promise.all(
-          category.products.map(async product => ({
+          (category.products || []).map(async product => ({
             ...product,
             mediaUrls: await Promise.all(
               (product.mediaUrls ?? []).map(url =>
@@ -142,7 +142,8 @@ export class CategoriesService {
               'ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY p.created_at DESC)',
               'row_num',
             )
-            .from('products', 'p'),
+            .from('products', 'p')
+            .where('p.user_id = :sellerId', { sellerId }),
         'lp',
         'lp.category_id = category.id AND lp.row_num <= 3',
       )
@@ -152,6 +153,7 @@ export class CategoriesService {
             .select('p.category_id', 'category_id')
             .addSelect('COUNT(*)', 'total_products_count')
             .from('products', 'p')
+            .where('p.user_id = :sellerId', { sellerId })
             .groupBy('p.category_id'),
         'pc',
         'pc.category_id = category.id',
@@ -161,6 +163,7 @@ export class CategoriesService {
       .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
       .orderBy('category.id', 'ASC')
       .getRawMany();
+
     return this.convertProductsPresignedUrl(categories);
   }
   async findAllPreferences(id: number | bigint): Promise<Category[]> {
@@ -188,7 +191,7 @@ export class CategoriesService {
       });
     }
 
-    const categories: Category[] = await this.categoriesRepository
+    return this.categoriesRepository
       .createQueryBuilder('category')
       .distinct(true)
       .leftJoinAndSelect('category.associations', 'association')
@@ -196,7 +199,6 @@ export class CategoriesService {
       .where('seller.id IN (:...sellerIds)', { sellerIds })
       .orWhere('category.systemGenerated = true')
       .getMany();
-    return this.convertProductsPresignedUrl(categories);
   }
   async findAllPreferencesByClient(id: number | bigint) {
     const user = await this.usersService.findOne(id);
@@ -244,7 +246,8 @@ export class CategoriesService {
               'ROW_NUMBER() OVER (PARTITION BY p.category_id ORDER BY p.created_at DESC)',
               'row_num',
             )
-            .from('products', 'p'),
+            .from('products', 'p')
+            .where('p.user_id IN (:...sellerIds)', { sellerIds }), // 🔥 filter products for sellers
         'lp',
         'lp.category_id = category.id AND lp.row_num <= 3',
       )
@@ -254,6 +257,7 @@ export class CategoriesService {
             .select('p.category_id', 'category_id')
             .addSelect('COUNT(*)', 'total_products_count')
             .from('products', 'p')
+            .where('p.user_id IN (:...sellerIds)', { sellerIds }) // 🔥 filter product count too
             .groupBy('p.category_id'),
         'pc',
         'pc.category_id = category.id',
@@ -270,6 +274,7 @@ export class CategoriesService {
       .groupBy('category.id, category.name, category.system_generated, pc.total_products_count')
       .orderBy('category.id', 'ASC')
       .getRawMany();
+
     return this.convertProductsPresignedUrl(categories);
   }
   async findAllByUserID(userId: number, search?: string): Promise<Category[]> {
