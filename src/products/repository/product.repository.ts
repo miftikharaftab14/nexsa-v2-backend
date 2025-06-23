@@ -31,16 +31,35 @@ export class ProductRepository extends BaseRepository<Product> {
   async findAll(): Promise<Product[]> {
     return this.repository.find({ relations: ['category'] });
   }
-  async findAllBySeller(userId: bigint, categoryId: number): Promise<Product[]> {
-    return this.repository.find({
-      where: {
-        userId,
-        category: {
-          id: categoryId,
-        },
-      },
-      relations: ['category'],
-    });
+  async findAllBySeller(
+    userId: bigint,
+    categoryId: number,
+    customerId: bigint,
+  ): Promise<Product[]> {
+    return this.repository
+      .createQueryBuilder('product')
+      .leftJoin('product.category', 'category')
+      .leftJoin(
+        'product_likes',
+        'like',
+        'like.product_id = product.id AND like.customer_id = :customerId',
+        { customerId },
+      )
+      .where('product.user_id = :userId', { userId })
+      .andWhere('product.category_id = :categoryId', { categoryId })
+      .select([
+        'product.id AS id',
+        'product.name AS name',
+        'product.description AS description',
+        'product.mediaUrls AS "mediaUrls"',
+        'product.userId AS "userId"',
+        'product.createdAt AS "createdAt"',
+        'product.updatedAt AS "updatedAt"',
+        'category.id AS "categoryId"',
+        'category.name AS "categoryName"',
+        'CASE WHEN like.id IS NOT NULL THEN true ELSE false END AS "liked"',
+      ])
+      .getRawMany();
   }
   async findbyId(id: number): Promise<Product[]> {
     return this.repository.find({

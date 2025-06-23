@@ -1,7 +1,6 @@
 import { IsNotEmpty, IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Descriptions } from 'src/common/enums/descriptions.enum';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateProductDto {
   @ApiProperty({ description: 'Product name' })
@@ -20,19 +19,24 @@ export class UpdateProductDto {
   @IsNumber()
   categoryId: number;
 
-  @ApiPropertyOptional({
-    description: Descriptions.PRODUCT_IMAGES,
-    type: 'array',
-    items: {
-      type: 'string',
-      format: 'uri',
-    },
+  @ApiProperty({
+    description: 'Array of media URLs',
+    type: [String],
+    required: false,
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   mediaUrls?: string[];
-  @IsOptional()
-  @IsArray()
-  images?: Express.Multer.File[];
+
+  // @ApiProperty({
+  //   description: 'Optional product images (files)',
+  //   type: 'string',
+  //   format: 'binary',
+  //   isArray: true,
+  //   required: false,
+  // })
+  // @IsOptional()
+  // @IsArray()
+  // images?: Express.Multer.File[];
 }

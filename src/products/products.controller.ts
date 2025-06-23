@@ -182,10 +182,16 @@ export class ProductsController {
   @ApiParam({ name: 'categoryId', type: Number, description: 'Category ID' })
   @ApiParam({ name: 'sellerId', type: Number, description: 'Seller ID' })
   async findAll(
+    @CurrentUser() currentUser: CurrentUserType,
+
     @Param('categoryId', ParseIntPipe) categoryId: number,
     @Param('sellerId', ParseIntPipe) sellerId: number,
   ) {
-    const result = await this.productsService.findAllBySeller(sellerId, categoryId);
+    const result = await this.productsService.findAllBySeller(
+      sellerId,
+      categoryId,
+      currentUser.userId,
+    );
     return {
       success: true,
       message: Messages.PRODUCTS_FETCHED,
@@ -218,6 +224,8 @@ export class ProductsController {
   @ApiOperation({ summary: 'Update product by ID' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
+    description: 'Update product',
+    required: true,
     schema: {
       type: 'object',
       properties: {
@@ -227,15 +235,19 @@ export class ProductsController {
         mediaUrls: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Optional: product images',
+          description: 'Optional: product image URLs',
+          example: ['products/image1.jpg', 'products/image2.jpg'],
         },
         images: {
           type: 'array',
-          items: { type: 'string', format: 'binary' },
-          description: 'Optional: Multiple product images',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+          description: 'Optional: image files',
         },
       },
-      required: ['name', 'description', 'categoryId'], // images not required
+      required: ['name', 'description', 'categoryId'],
     },
   })
   @ApiResponse({ status: 200, description: 'Product updated successfully' })

@@ -15,6 +15,7 @@ import { Product } from './entities/product.entity';
 import { Category } from 'src/categories/entities/category.entity';
 import { UserService } from 'src/users/services/user.service';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { extractS3Key } from 'src/common/filters/signed-url-key-extract';
 
 @Injectable()
 export class ProductsService {
@@ -84,14 +85,22 @@ export class ProductsService {
     }
   }
 
-  async findAllBySeller(sellerId: number | bigint, categoryId: number): Promise<Product[]> {
+  async findAllBySeller(
+    sellerId: number | bigint,
+    categoryId: number,
+    customerId: bigint,
+  ): Promise<Product[]> {
     try {
       this.logger.debug('Attempting to fetch all products by seller', String(sellerId));
       const user = await this.userService.findOne(sellerId);
       if (!user) {
         throw new UnauthorizedException(`User with ID ${sellerId} not found`);
       }
-      const products = await this.productsRepository.findAllBySeller(user.id, categoryId);
+      const products = await this.productsRepository.findAllBySeller(
+        user.id,
+        categoryId,
+        customerId,
+      );
       const result = await this.convertProductListPresignedUrls(products);
       this.logger.log('Fetched all products by seller successfully', String(sellerId));
       return result;
@@ -135,9 +144,11 @@ export class ProductsService {
       if (!product) {
         throw new NotFoundException(`Product with ID ${id} not found`);
       }
-
+      let mediaUrls: string[] = [];
+      if (updateProductDto.mediaUrls) {
+        mediaUrls = updateProductDto.mediaUrls.map(url => extractS3Key(url));
+      }
       // Prepare media URLs
-      let mediaUrls = updateProductDto.mediaUrls || product.mediaUrls || [];
 
       // Upload new images if provided
       if (images && images.length > 0) {
