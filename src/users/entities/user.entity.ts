@@ -10,6 +10,7 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { CategoryAssociation } from '../../categories/entities/category-association.entity';
 import { Product } from '../../products/entities/product.entity';
 import { ProductLike } from '../../products/entities/product-like.entity';
+import { UserDeviceToken } from './user-device-token.entity';
 
 @Entity('users')
 export class User {
@@ -55,6 +56,9 @@ export class User {
 
   @Column({ default: false })
   is_deleted: boolean;
+
+  @OneToMany(() => UserDeviceToken, token => token.user)
+  deviceTokens: UserDeviceToken[];
 
   @CreateDateColumn()
   created_at: Date;

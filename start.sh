@@ -3,7 +3,7 @@
 set -e  # Exit on error and show it
 
 echo "Installing dependencies..."
-# npm install
+npm install
 
 echo "📦 Running database migrations..."
 npm run migration:run

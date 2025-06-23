@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsEnum, Allow } from 'class-validator';
+import { IsNotEmpty, IsEnum, Allow, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Examples } from 'src/common/enums/examples.enum';
 import { Descriptions } from 'src/common/enums/descriptions.enum';
@@ -26,6 +26,29 @@ export class LoginDto {
   @IsNotEmpty()
   @IsEnum(UserRole)
   role: UserRole;
+
+  @ApiProperty({
+    description: Descriptions.DEVICE_TYPE,
+    required: false,
+    example: 'sample_type',
+  })
+  @IsOptional()
+  deviceType: string;
+
+  @ApiProperty({
+    description: Descriptions.DEVICE_TOKEN,
+    required: false,
+    example: 'sample_token',
+  })
+  @IsOptional()
+  deviceToken: string;
+  @ApiProperty({
+    description: Descriptions.DEVICE_OS,
+    required: false,
+    example: 'sample_OS',
+  })
+  @IsOptional()
+  deviceOs: string;
 
   @ApiProperty({
     description: 'Temporary key from frontend for deep linking',

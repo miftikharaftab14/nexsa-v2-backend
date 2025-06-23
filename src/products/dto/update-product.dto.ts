@@ -1,5 +1,5 @@
 import { IsNotEmpty, IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateProductDto {
@@ -19,14 +19,25 @@ export class UpdateProductDto {
   @IsNumber()
   categoryId: number;
 
-  @ApiProperty({
-    description: 'Array of media URLs',
-    type: [String],
-    required: false,
-  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }): string[] => {
+    if (typeof value === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
+          return parsed;
+        }
+        return [];
+      } catch {
+        return [];
+      }
+    }
+    return value;
+  })
   mediaUrls?: string[];
 
   // @ApiProperty({

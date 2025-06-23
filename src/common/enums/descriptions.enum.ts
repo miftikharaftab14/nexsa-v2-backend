@@ -16,6 +16,10 @@ export enum Descriptions {
   PHONE_DESC = 'Phone number in E.164 format (e.g., +12345678900)',
   EMAIL_DESC = 'Email address of the user',
   ROLE_DESC = 'Role of the user (CUSTOMER, SELLER, or ADMIN)',
+  DEVICE_TOKEN = 'Unique device token used for push notifications (provided by Firebase)',
+  DEVICE_TYPE = 'Type of device (e.g., Android, iOS, Web)',
+  DEVICE_OS = 'Operating system of the device (e.g., Android 14, iOS 17)',
+
   OTP_DESC = 'One-time password (6 digits)',
   PASSWORD_DESC = 'Password of the user',
   TOKEN_DESC = 'JWT token for authentication',
