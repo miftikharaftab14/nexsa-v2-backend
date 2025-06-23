@@ -10,6 +10,9 @@ import { UserModule } from 'src/users/user.module';
 import { ProductLike } from './entities/product-like.entity';
 import { ProductLikeRepository } from './repository/product-like.repository';
 import { ProductLikeService } from './products-like.service';
+import { UserDeviceTokenModule } from 'src/users/user-device-token.module';
+import { NotificationModule } from 'src/common/modules/Notification.module';
+import { ContactsModule } from 'src/contacts/contacts.module';
 
 @Module({
   imports: [
@@ -17,6 +20,9 @@ import { ProductLikeService } from './products-like.service';
     CategoriesModule,
     FilesModule,
     UserModule,
+    UserDeviceTokenModule,
+    NotificationModule,
+    ContactsModule,
   ],
   providers: [ProductsService, ProductRepository, ProductLikeService, ProductLikeRepository],
   controllers: [ProductsController],

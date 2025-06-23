@@ -1,11 +1,6 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { UserDeviceToken } from '../entities/user-device-token.entity';
 
 @Injectable()
@@ -69,6 +64,16 @@ export class UserDeviceTokenService {
     } catch (error) {
       this.logger.error('Failed to fetch device tokens for user', error);
       throw new InternalServerErrorException('Failed to fetch device tokens for user');
+    }
+  }
+
+  async getTokensByUsers(userIds: bigint[]): Promise<string[]> {
+    try {
+      const records = await this.repository.find({ where: { userId: In(userIds) } });
+      return records.map(r => r.deviceToken);
+    } catch (error) {
+      this.logger.error('Failed to fetch device tokens for users', error);
+      throw new InternalServerErrorException('Failed to fetch device tokens for users');
     }
   }
 

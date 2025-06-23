@@ -48,7 +48,7 @@ export class ContactRepository extends BaseRepository<Contact> {
       .getRawMany();
   }
 
-  async findBySellerId(sellerId: number): Promise<Contact[]> {
+  async findBySellerId(sellerId: number | bigint): Promise<Contact[]> {
     return this.repository.find({
       where: { seller_id: BigInt(sellerId) },
       relations: ['seller'],

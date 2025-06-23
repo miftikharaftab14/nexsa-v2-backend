@@ -89,6 +89,8 @@ export class ProductsController {
     )
     images: Express.Multer.File[],
   ) {
+    console.log({ createProductDto });
+
     const result = await this.productsService.createProduct(
       createProductDto,
       images || [],

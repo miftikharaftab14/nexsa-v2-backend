@@ -237,7 +237,7 @@ export class ContactService implements IContactUpdate {
       });
     }
   }
-  async findBySellerId(sellerId: number): Promise<ApiResponse<Contact[]>> {
+  async findBySellerId(sellerId: number | bigint): Promise<ApiResponse<Contact[]>> {
     try {
       this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT, sellerId);
       const contacts = await this.contactRepo.findBySellerId(sellerId);

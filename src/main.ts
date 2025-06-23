@@ -7,11 +7,16 @@ import { BigIntSerializerInterceptor } from './common/interceptors/bigint-serial
 import { CustomValidationPipe } from './common/pipes/validation.pipe';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import * as express from 'express'; // ✅ Use express directly
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
+
+  // ✅ Allow large JSON and form payloads (100MB)
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
   // Global exception filter
   app.useGlobalFilters(new HttpExceptionFilter());
@@ -42,7 +47,6 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   const port = process.env.PORT ?? 3000;
-  // await app.listen(port, '192.168.100.113');
   await app.listen(port, '0.0.0.0');
   Logger.log(`Application is running on: http://localhost:${port}`);
 }

@@ -15,7 +15,8 @@ export class NotificationService {
   private initFirebase() {
     if (this.initialized) return;
     try {
-      const serviceAccountPath = path.resolve(__dirname, '../../config/serviceAccountKey.json');
+      const serviceAccountPath = path.resolve(process.cwd(), 'serviceAccountKey.json');
+
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const serviceAccount = require(serviceAccountPath) as ServiceAccount;
       admin.initializeApp({

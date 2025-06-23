@@ -16,6 +16,9 @@ import { Category } from 'src/categories/entities/category.entity';
 import { UserService } from 'src/users/services/user.service';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { extractS3Key } from 'src/common/filters/signed-url-key-extract';
+import { UserDeviceTokenService } from '../users/services/user-device-token.service';
+import { NotificationService } from '../common/services/notification.service';
+import { ContactService } from '../contacts/services/contact.service';
 
 @Injectable()
 export class ProductsService {
@@ -24,9 +27,11 @@ export class ProductsService {
     private readonly productsRepository: ProductRepository,
     private readonly categoriesService: CategoriesService,
     private readonly userService: UserService,
-
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
+    private readonly userDeviceTokenService: UserDeviceTokenService,
+    private readonly notificationService: NotificationService,
+    private readonly contactService: ContactService,
   ) {}
   async convertProductListPresignedUrls(products: Product[]) {
     try {
@@ -76,6 +81,31 @@ export class ProductsService {
         mediaUrls,
       });
       this.logger.log('Product created successfully', String(product.id));
+
+      // Send push notification to all customers of the seller
+      try {
+        const contacts = await this.contactService.findBySellerId(sellerId);
+        const customerIds = (contacts.data || []).map(c => c.invited_user_id).filter(Boolean);
+        if (customerIds.length > 0) {
+          const tokensArr = await this.userDeviceTokenService.getTokensByUsers(customerIds);
+          const tokens = tokensArr.flat().filter(Boolean);
+          if (tokens.length > 0) {
+            await this.notificationService.sendPushNotification(
+              tokens,
+              'New Product Available!',
+              `A new product "${product.name}" was added in category "${category.name}" by ${user.username || user.email || 'a seller'}.`,
+              {
+                productId: String(product.id),
+                categoryId: String(category.id),
+                type: 'product',
+                screen: 'CustomerProductDetail',
+              },
+            );
+          }
+        }
+      } catch (notifyError) {
+        this.logger.error('Failed to send push notification after product creation', notifyError);
+      }
       return product;
     } catch (error) {
       this.logger.error('Failed to create product', error);
@@ -119,8 +149,10 @@ export class ProductsService {
       if (!product) {
         throw new NotFoundException(`Product with ID ${id} not found`);
       }
+      const [result] = await this.convertProductListPresignedUrls([product]);
+
       this.logger.log('Fetched product successfully', String(id));
-      return product;
+      return result;
     } catch (error) {
       this.logger.error('Failed to fetch product', error);
       throw error instanceof NotFoundException
