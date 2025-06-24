@@ -14,6 +14,7 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { FilesModule } from './files/files.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ProductsModule } from './products/products.module';
       load: [dbConfiguration],
       validate,
     }),
+    ChatModule,
     CommonModule,
     TypeOrmModule.forRootAsync(typeOrmAsyncConfig),
     UserModule,

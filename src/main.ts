@@ -8,6 +8,7 @@ import { CustomValidationPipe } from './common/pipes/validation.pipe';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as express from 'express'; // ✅ Use express directly
+import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -17,7 +18,7 @@ async function bootstrap() {
   // ✅ Allow large JSON and form payloads (100MB)
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
-
+  app.useWebSocketAdapter(new IoAdapter(app));
   // Global exception filter
   app.useGlobalFilters(new HttpExceptionFilter());
 
