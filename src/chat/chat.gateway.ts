@@ -4,9 +4,20 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   WebSocketServer,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { ChatService } from './chat.service';
+import { SendMessageDto } from './dto/send-message.dto';
+import { SendBroadcastDto } from './dto/send-broadcast.dto';
+import { ContactService } from 'src/contacts/services/contact.service';
+import { UserService } from 'src/users/services/user.service';
+import { Contact } from 'src/contacts/entities/contact.entity';
+import { JwtService } from '@nestjs/jwt';
+import { UnauthorizedException } from '@nestjs/common';
 
 @WebSocketGateway({
   cors: {
@@ -18,16 +29,104 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   @WebSocketServer() server: Server;
   private logger: Logger = new Logger('ChatGateway');
 
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly contactService: ContactService,
+    private readonly userService: UserService,
+    private readonly jwtService: JwtService,
+  ) {}
+
   afterInit(server: Server) {
     this.logger.log('ChatGateway Initialized!');
   }
 
-  handleConnection(client: Socket, ...args: any[]) {
-    this.logger.log(`Client connected: ${client.id}`);
-    // Here you would authenticate the user and join them to relevant rooms
+  async handleConnection(client: Socket, ...args: any[]) {
+    try {
+      // Extract JWT from handshake headers
+      const authHeader = client.handshake.headers['authorization'] || client.handshake.auth?.token;
+      if (!authHeader) {
+        client.disconnect();
+        throw new UnauthorizedException('No token provided');
+      }
+      // Support both 'Bearer <token>' and raw token
+      const token: string = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+
+      // Ensure JWT_SECRET is available
+      const jwtSecret = process.env.JWT_SECRET || 'supersecret';
+      if (!jwtSecret) {
+        client.disconnect();
+        this.logger.error('JWT_SECRET is not set in environment variables.');
+        throw new UnauthorizedException('JWT secret not configured');
+      }
+      // Verify and decode token with explicit secret
+      const payload = this.jwtService.verify(token, { secret: jwtSecret });
+      // Fetch user
+      const user = await this.userService.findOne(payload.sub || payload.userId);
+      if (!user) {
+        client.disconnect();
+        throw new UnauthorizedException('Invalid user');
+      }
+      // Attach user info to socket
+      (client as any).user = user;
+      this.logger.log(`Client connected: ${client.id}, userId: ${user.id}`);
+    } catch (err) {
+      client.disconnect();
+      this.logger.warn(`Socket connection rejected: ${err.message}`);
+    }
   }
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
+  }
+
+  @SubscribeMessage('send_message')
+  async handleSendMessage(@MessageBody() data: SendMessageDto, @ConnectedSocket() client: Socket) {
+    // Fetch user from socket
+    const user = (client as any).user;
+    if (!user) {
+      this.server.to(client.id).emit('error', { message: 'Unauthorized' });
+      return;
+    }
+    // Use user.id as senderId
+    const sender = await this.userService.findOne(user.id);
+    if (!sender) {
+      this.server.to(client.id).emit('error', { message: 'Sender not found' });
+      return;
+    }
+    // Validate or create contact (chat)
+    let contact: Contact | null = null;
+    try {
+      const contactResp = await this.contactService.findOne(Number(data.contactId));
+      contact = contactResp?.data;
+    } catch (e) {
+      contact = null;
+    }
+    if (!contact) {
+      // Optionally, create a new contact/chat if not found (customize as needed)
+      // You may need more info (seller_id, invited_user_id, etc.)
+      this.server.to(client.id).emit('error', { message: 'Chat/contact not found' });
+      return;
+    }
+    // Store message in DB
+    const message = await this.chatService.createMessage(
+      contact,
+      sender,
+      data.messageType,
+      data.content,
+      data.mediaKey,
+    );
+    console.log('-----------------------');
+
+    // Emit the stored message to all clients in the chat
+    this.server.emit('receive_message', message);
+  }
+
+  @SubscribeMessage('send_broadcast')
+  async handleSendBroadcast(
+    @MessageBody() data: SendBroadcastDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    // TODO: Implement broadcast logic
+    this.server.emit('receive_broadcast', data);
   }
 }
