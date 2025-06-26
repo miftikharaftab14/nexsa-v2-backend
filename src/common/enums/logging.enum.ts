@@ -113,6 +113,12 @@ export enum LogMessages {
   FILE_UPLOAD_FAILED = 'Failed to upload file',
   FILE_NOT_FOUND = 'File not found',
   FILE_DELETE_FAILED = 'Failed to delete file',
+
+  // Preference Log Messages
+  PREFERENCE_FETCH_ATTEMPT = 'Attempting to fetch preference: %s',
+  PREFERENCE_FETCH_SUCCESS = 'Preference fetched successfully: %s',
+  PREFERENCE_FETCH_FAILED = 'Failed to fetch preference: %s',
+  PREFERENCE_NOT_FOUND = 'Preference not found: %s',
 }
 
 export enum LogLevels {
@@ -132,4 +138,5 @@ export enum LogContexts {
   FILE = 'File',
   EMAIL = 'EMAIL',
   SMSINVITAIONSTRATEGY = 'SMSInvitationStrategy',
+  PREFERENCE = 'PreferenceService',
 }

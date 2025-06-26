@@ -15,6 +15,7 @@ import { FilesModule } from './files/files.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
 import { ChatModule } from './chat/chat.module';
+import { PreferencesModule } from './preferences/preferences.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ChatModule } from './chat/chat.module';
     FilesModule,
     CategoriesModule,
     ProductsModule,
+    PreferencesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

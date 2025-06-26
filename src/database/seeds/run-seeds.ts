@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { CategoriesSeed } from './categories.seed';
+import { PreferencesSeed } from './preferences.seed';
 
 export class SeedRunner {
   constructor(private dataSource: DataSource) {}
@@ -9,8 +9,8 @@ export class SeedRunner {
 
     try {
       // Run seeds in order
-      const categoriesSeed = new CategoriesSeed(this.dataSource);
-      await categoriesSeed.run();
+      const preferencesSeed = new PreferencesSeed(this.dataSource);
+      await preferencesSeed.run();
 
       console.log('All seeds completed successfully!');
     } catch (error) {
