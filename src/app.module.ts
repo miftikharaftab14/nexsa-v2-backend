@@ -12,10 +12,10 @@ import { CommonModule } from './common/common.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { FilesModule } from './files/files.module';
-import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
 import { ChatModule } from './chat/chat.module';
 import { PreferencesModule } from './preferences/preferences.module';
+import { GalleryModule } from './galleries/gallery.module';
 
 @Module({
   imports: [
@@ -33,9 +33,9 @@ import { PreferencesModule } from './preferences/preferences.module';
     ContactsModule,
     InvitationsModule,
     FilesModule,
-    CategoriesModule,
     ProductsModule,
     PreferencesModule,
+    GalleryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

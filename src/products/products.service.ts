@@ -7,25 +7,25 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ProductRepository } from './repository/product.repository';
-import { CategoriesService } from '../categories/categories.service';
 import { InjectionToken } from '../common/constants/injection-tokens';
 import { FileService } from '../files/services/file.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { Product } from './entities/product.entity';
-import { Category } from 'src/categories/entities/category.entity';
 import { UserService } from 'src/users/services/user.service';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { extractS3Key } from 'src/common/filters/signed-url-key-extract';
 import { UserDeviceTokenService } from '../users/services/user-device-token.service';
 import { NotificationService } from '../common/services/notification.service';
 import { ContactService } from '../contacts/services/contact.service';
+import { GalleryService } from 'src/galleries/gallery.service';
+import { Gallery } from 'src/galleries/entities/gallery.entity';
 
 @Injectable()
 export class ProductsService {
   private readonly logger = new Logger('ProductsService');
   constructor(
     private readonly productsRepository: ProductRepository,
-    private readonly categoriesService: CategoriesService,
+    private readonly galleryService: GalleryService,
     private readonly userService: UserService,
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
@@ -64,7 +64,7 @@ export class ProductsService {
         throw new UnauthorizedException(`User with ID ${sellerId} not found`);
       }
       // Validate category exists
-      const category: Category = await this.categoriesService.findOne(dto.categoryId);
+      const gallery: Gallery = await this.galleryService.findOne(dto.galleryId);
 
       // Upload images to storage and get URLs
       const uploadedFiles = await Promise.all(
@@ -76,7 +76,7 @@ export class ProductsService {
       const product = await this.productsRepository.create({
         name: dto.name,
         description: dto.description || '',
-        category,
+        gallery,
         userId: user.id,
         mediaUrls,
       });
@@ -93,10 +93,10 @@ export class ProductsService {
             await this.notificationService.sendPushNotification(
               tokens,
               'New Product Available!',
-              `A new product "${product.name}" was added in category "${category.name}" by ${user.username || user.email || 'a seller'}.`,
+              `A new product "${product.name}" was added in category "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
               {
                 productId: String(product.id),
-                categoryId: String(category.id),
+                galleryId: String(gallery.id),
                 type: 'product',
                 screen: 'CustomerProductDetail',
               },
@@ -117,7 +117,7 @@ export class ProductsService {
 
   async findAllBySeller(
     sellerId: number | bigint,
-    categoryId: number,
+    galleryId: number,
     customerId: bigint,
   ): Promise<Product[]> {
     try {
@@ -128,7 +128,7 @@ export class ProductsService {
       }
       const products = await this.productsRepository.findAllBySeller(
         user.id,
-        categoryId,
+        galleryId,
         customerId,
       );
       const result = await this.convertProductListPresignedUrls(products);
@@ -196,13 +196,13 @@ export class ProductsService {
       };
 
       // Handle category relation
-      if (updateProductDto.categoryId) {
-        const category = await this.categoriesService.findOne(updateProductDto.categoryId);
-        if (!category) {
-          throw new NotFoundException(`Category with ID ${updateProductDto.categoryId} not found`);
+      if (updateProductDto.galleryId) {
+        const gallery = await this.galleryService.findOne(updateProductDto.galleryId);
+        if (!gallery) {
+          throw new NotFoundException(`Category with ID ${updateProductDto.galleryId} not found`);
         }
-        updateData.category = category;
-        delete updateData.categoryId;
+        updateData.gallery = gallery;
+        delete updateData.galleryId;
       }
 
       await this.productsRepository.update(id, updateData);
@@ -235,23 +235,11 @@ export class ProductsService {
         );
       }
 
-      await this.productsRepository.delete(id);
+      await this.productsRepository.softDelete(id);
       this.logger.log('Product removed successfully', String(id));
     } catch (error) {
       this.logger.error('Failed to remove product', error);
       throw new InternalServerErrorException('Failed to remove product');
-    }
-  }
-
-  async findByCategory(categoryId: number): Promise<Product[]> {
-    try {
-      this.logger.debug('Attempting to fetch products by category', String(categoryId));
-      const products = await this.productsRepository.findByCategoryId(categoryId);
-      this.logger.log('Fetched products by category successfully', String(categoryId));
-      return products;
-    } catch (error) {
-      this.logger.error('Failed to fetch products by category', error);
-      throw new InternalServerErrorException('Failed to fetch products by category');
     }
   }
 
@@ -287,5 +275,8 @@ export class ProductsService {
       this.logger.error('Failed to remove image from product', error);
       throw new InternalServerErrorException('Failed to remove image from product');
     }
+  }
+  async softDeleteByGalleryId(galleryId: number): Promise<void> {
+    await this.productsRepository.softDeleteByGalleryId(galleryId);
   }
 }

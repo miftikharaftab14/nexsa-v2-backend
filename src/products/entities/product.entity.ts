@@ -8,9 +8,9 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Category } from '../../categories/entities/category.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProductLike } from './product-like.entity'; // ⬅️ Import the like entity
+import { Gallery } from '../../galleries/entities/gallery.entity';
 
 @Entity('products')
 export class Product {
@@ -26,13 +26,6 @@ export class Product {
   @Column({ name: 'media_urls', type: 'text', array: true, default: '{}' })
   mediaUrls: string[];
 
-  @Column({ name: 'category_id', nullable: true })
-  categoryId: number;
-
-  @ManyToOne(() => Category, category => category.products, { onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'category_id' })
-  category: Category;
-
   @Column({ name: 'user_id', nullable: true })
   userId: bigint;
 
@@ -43,9 +36,19 @@ export class Product {
   @OneToMany(() => ProductLike, like => like.product, { cascade: true }) // ⬅️ Added this
   likes: ProductLike[];
 
+  @Column({ name: 'gallery_id', nullable: true })
+  galleryId: number;
+
+  @ManyToOne(() => Gallery, gallery => gallery.products, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'gallery_id' })
+  gallery: Gallery;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @Column({ default: false })
+  is_deleted: boolean;
 }

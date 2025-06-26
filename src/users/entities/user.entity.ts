@@ -5,12 +5,13 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  OneToOne,
 } from 'typeorm';
 import { UserRole } from '../../common/enums/user-role.enum';
-import { CategoryAssociation } from '../../categories/entities/category-association.entity';
 import { Product } from '../../products/entities/product.entity';
 import { ProductLike } from '../../products/entities/product-like.entity';
 import { UserDeviceToken } from './user-device-token.entity';
+import { Gallery } from '../../galleries/entities/gallery.entity';
 
 @Entity('users')
 export class User {
@@ -36,9 +37,6 @@ export class User {
   @OneToMany(() => ProductLike, like => like.customer)
   likes: ProductLike[];
 
-  @OneToMany(() => CategoryAssociation, categoryAssociation => categoryAssociation.seller)
-  categoryAssociations: CategoryAssociation[];
-
   @OneToMany(() => Product, product => product.user)
   products: Product[];
 
@@ -59,6 +57,12 @@ export class User {
 
   @OneToMany(() => UserDeviceToken, token => token.user)
   deviceTokens: UserDeviceToken[];
+
+  @OneToMany(() => Gallery, gallery => gallery.user)
+  galleries: Gallery[];
+
+  @OneToOne(() => Gallery, gallery => gallery.user)
+  gallery: Gallery;
 
   @CreateDateColumn()
   created_at: Date;

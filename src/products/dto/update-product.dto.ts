@@ -13,11 +13,11 @@ export class UpdateProductDto {
   @IsString()
   description: string;
 
-  @ApiProperty({ description: 'ID of the category this product belongs to' })
+  @ApiProperty({ description: 'ID of the gallery this product belongs to' })
   @IsNotEmpty()
   @Type(() => Number)
   @IsNumber()
-  categoryId: number;
+  galleryId: number;
 
   @IsOptional()
   @IsArray()

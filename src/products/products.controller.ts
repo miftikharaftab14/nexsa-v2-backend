@@ -65,7 +65,7 @@ export class ProductsController {
       properties: {
         name: { type: 'string', example: 'Nike Air Max' },
         description: { type: 'string', example: 'Stylish and comfortable running shoes' },
-        categoryId: { type: 'number', example: 1 },
+        galleryId: { type: 'number', example: 1 },
         images: {
           type: 'array',
           items: { type: 'string', format: 'binary' },
@@ -177,21 +177,21 @@ export class ProductsController {
   }
 
   /**
-   * Get all products for a given category and seller
+   * Get all products for a given Gallery and seller
    */
-  @Get('all/:categoryId/:sellerId')
+  @Get('all/:galleryId/:sellerId')
   @ApiOperation({ summary: 'Get products by seller and category ID' })
-  @ApiParam({ name: 'categoryId', type: Number, description: 'Category ID' })
+  @ApiParam({ name: 'galleryId', type: Number, description: 'Gallery ID' })
   @ApiParam({ name: 'sellerId', type: Number, description: 'Seller ID' })
   async findAll(
     @CurrentUser() currentUser: CurrentUserType,
 
-    @Param('categoryId', ParseIntPipe) categoryId: number,
+    @Param('galleryId', ParseIntPipe) galleryId: number,
     @Param('sellerId', ParseIntPipe) sellerId: number,
   ) {
     const result = await this.productsService.findAllBySeller(
       sellerId,
-      categoryId,
+      galleryId,
       currentUser.userId,
     );
     return {

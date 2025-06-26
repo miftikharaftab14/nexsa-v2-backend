@@ -16,7 +16,7 @@ export class CreateProductDto {
   @IsNotEmpty()
   @Type(() => Number)
   @IsNumber()
-  categoryId: number;
+  galleryId: number;
 
   @ApiProperty({
     description: Descriptions.PRODUCT_IMAGES,

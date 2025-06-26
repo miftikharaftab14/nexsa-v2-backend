@@ -29,7 +29,7 @@ export class ProductRepository extends BaseRepository<Product> {
   }
 
   async findAll(): Promise<Product[]> {
-    return this.repository.find({ relations: ['category'] });
+    return this.repository.find({ relations: ['category'], where: { is_deleted: false } });
   }
   async findAllBySeller(
     userId: bigint,
@@ -47,6 +47,7 @@ export class ProductRepository extends BaseRepository<Product> {
       )
       .where('product.user_id = :userId', { userId })
       .andWhere('product.category_id = :categoryId', { categoryId })
+      .andWhere('product.is_deleted = false')
       .select([
         'product.id AS id',
         'product.name AS name',
@@ -63,14 +64,7 @@ export class ProductRepository extends BaseRepository<Product> {
   }
   async findbyId(id: number): Promise<Product[]> {
     return this.repository.find({
-      where: { id },
-      relations: ['category'],
-    });
-  }
-
-  async findByCategoryId(categoryId: number): Promise<Product[]> {
-    return this.repository.find({
-      where: { category: { id: categoryId } },
+      where: { id, is_deleted: false },
       relations: ['category'],
     });
   }
@@ -101,5 +95,16 @@ export class ProductRepository extends BaseRepository<Product> {
 
     product.mediaUrls = [...(product.mediaUrls || []), ...urls];
     return this.repository.save(product);
+  }
+  async softDelete(id: number): Promise<void> {
+    await this.repository.update(id, { is_deleted: true });
+  }
+  async softDeleteByGalleryId(galleryId: number): Promise<void> {
+    await this.repository
+      .createQueryBuilder()
+      .update()
+      .set({ is_deleted: true })
+      .where('gallery_id = :galleryId', { galleryId })
+      .execute();
   }
 }
