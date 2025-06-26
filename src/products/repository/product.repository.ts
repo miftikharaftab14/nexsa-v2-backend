@@ -29,16 +29,12 @@ export class ProductRepository extends BaseRepository<Product> {
   }
 
   async findAll(): Promise<Product[]> {
-    return this.repository.find({ relations: ['category'], where: { is_deleted: false } });
+    return this.repository.find({ relations: ['gallery'], where: { is_deleted: false } });
   }
-  async findAllBySeller(
-    userId: bigint,
-    categoryId: number,
-    customerId: bigint,
-  ): Promise<Product[]> {
+  async findAllBySeller(userId: bigint, galleryId: number, customerId: bigint): Promise<Product[]> {
     return this.repository
       .createQueryBuilder('product')
-      .leftJoin('product.category', 'category')
+      .leftJoin('product.gallery', 'gallery')
       .leftJoin(
         'product_likes',
         'like',
@@ -46,7 +42,7 @@ export class ProductRepository extends BaseRepository<Product> {
         { customerId },
       )
       .where('product.user_id = :userId', { userId })
-      .andWhere('product.category_id = :categoryId', { categoryId })
+      .andWhere('product.gallery_id = :galleryId', { galleryId })
       .andWhere('product.is_deleted = false')
       .select([
         'product.id AS id',
@@ -56,8 +52,8 @@ export class ProductRepository extends BaseRepository<Product> {
         'product.userId AS "userId"',
         'product.createdAt AS "createdAt"',
         'product.updatedAt AS "updatedAt"',
-        'category.id AS "categoryId"',
-        'category.name AS "categoryName"',
+        'gallery.id AS "galleryId"',
+        'gallery.name AS "galleryName"',
         'CASE WHEN like.id IS NOT NULL THEN true ELSE false END AS "liked"',
       ])
       .getRawMany();
@@ -65,14 +61,14 @@ export class ProductRepository extends BaseRepository<Product> {
   async findbyId(id: number): Promise<Product[]> {
     return this.repository.find({
       where: { id, is_deleted: false },
-      relations: ['category'],
+      relations: ['gallery'],
     });
   }
 
   async removeMediaUrl(productId: number, url: string): Promise<Product> {
     const product = await this.repository.findOne({
       where: { id: productId },
-      relations: ['category'],
+      relations: ['gallery'],
     });
 
     if (!product) {
@@ -86,7 +82,7 @@ export class ProductRepository extends BaseRepository<Product> {
   async addMediaUrls(productId: number, urls: string[]): Promise<Product> {
     const product = await this.repository.findOne({
       where: { id: productId },
-      relations: ['category'],
+      relations: ['gallery'],
     });
 
     if (!product) {

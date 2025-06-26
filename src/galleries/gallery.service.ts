@@ -52,7 +52,7 @@ export class GalleryService {
     }
     // Only one gallery with the same name per user
     const existing = await this.galleriesRepository.findOne({
-      where: { userId: user.id, name: createGalleryDto.name },
+      where: { userId: user.id, name: createGalleryDto.name, is_deleted: false },
     });
 
     if (existing) {
@@ -67,8 +67,12 @@ export class GalleryService {
     return this.galleriesRepository.save(gallery);
   }
 
-  async findAll(): Promise<Gallery[]> {
-    return this.galleriesRepository.find({ relations: ['user'], where: { is_deleted: false } });
+  async findAll(userId: bigint): Promise<Gallery[]> {
+    const galleries: Gallery[] = await this.galleriesRepository.find({
+      relations: ['user'],
+      where: { userId, is_deleted: false },
+    });
+    return this.convertProductsPresignedUrl(galleries);
   }
 
   async findByUserId(
@@ -88,10 +92,70 @@ export class GalleryService {
       throw new ForbiddenException('Unauthorized: you are not allowed to fetch this data.');
     }
 
-    const galleries = await this.galleriesRepository.find({
-      where: { userId: user.id, is_deleted: false },
-      relations: ['products'],
-    });
+    const galleries: Gallery[] = await this.galleriesRepository
+      .createQueryBuilder('gallery')
+      .select([
+        'gallery.id AS gallery_id',
+        'gallery.name AS gallery_name',
+        'pc.total_products_count AS total_products_count',
+        `
+      COALESCE(
+        JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'id', lp.id,
+            'name', lp.name,
+            'description', lp.description,
+            'mediaUrls', lp.media_urls,
+            'created_at', lp.created_at,
+            'updated_at', lp.updated_at,
+            'liked', (
+              SELECT EXISTS (
+                SELECT 1
+                FROM product_likes pl
+                WHERE pl.product_id = lp.id AND pl.customer_id = :userId
+              )
+            )
+          )
+          ORDER BY lp.created_at DESC
+        ) FILTER (WHERE lp.id IS NOT NULL),
+        '[]'
+      ) AS products
+    `,
+      ])
+      .leftJoin(
+        qb =>
+          qb
+            .select('p.*')
+            .addSelect(
+              'ROW_NUMBER() OVER (PARTITION BY p.gallery_id ORDER BY p.created_at DESC)',
+              'row_num',
+            )
+            .from('products', 'p')
+            .where('p.user_id = :sellerId', { sellerId })
+            .andWhere('p.is_deleted = false'),
+        'lp',
+        'lp.gallery_id = gallery.id AND lp.row_num <= 3',
+      )
+      // Join to get total products count
+      .leftJoin(
+        qb =>
+          qb
+            .select('p.gallery_id', 'gallery_id')
+            .addSelect('COUNT(*)', 'total_products_count')
+            .from('products', 'p')
+            .where('p.user_id = :sellerId', { sellerId })
+            .andWhere('p.is_deleted = false')
+            .groupBy('p.gallery_id'),
+        'pc',
+        'pc.gallery_id = gallery.id',
+      )
+      .where('gallery.user_id = :sellerId')
+      .andWhere('gallery.is_deleted = false')
+      .groupBy('gallery.id, gallery.name, pc.total_products_count')
+      .orderBy('gallery.id', 'ASC')
+      .setParameters({ userId, sellerId }) // Pass both userId and sellerId
+      .getRawMany();
+
     return this.convertProductsPresignedUrl(galleries);
   }
 

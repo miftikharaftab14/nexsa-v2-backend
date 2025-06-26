@@ -185,7 +185,6 @@ export class ProductsController {
   @ApiParam({ name: 'sellerId', type: Number, description: 'Seller ID' })
   async findAll(
     @CurrentUser() currentUser: CurrentUserType,
-
     @Param('galleryId', ParseIntPipe) galleryId: number,
     @Param('sellerId', ParseIntPipe) sellerId: number,
   ) {

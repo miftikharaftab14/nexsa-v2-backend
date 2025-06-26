@@ -46,20 +46,20 @@ export class GalleryController {
     };
   }
 
-  // @Get()
-  // @Roles(UserRole.SELLER)
-  // @ApiOperation({ summary: 'Get all galleries' })
-  // @ApiResponse({ status: 200, description: 'Return all galleries' })
-  // @ApiResponse({ status: 401, description: 'Unauthorized' })
-  // async findAll(@CurrentUser() user: CurrentUserType) {
-  //   const galleries = await this.galleryService.findAll();
-  //   return {
-  //     success: true,
-  //     message: 'Galleries fetched',
-  //     status: HttpStatus.OK,
-  //     data: galleries,
-  //   };
-  // }
+  @Get()
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Get all galleries for seller label and value' })
+  @ApiResponse({ status: 200, description: 'Return all galleries' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async findAll(@CurrentUser() user: CurrentUserType) {
+    const galleries = await this.galleryService.findAll(user.userId);
+    return {
+      success: true,
+      message: 'Galleries fetched',
+      status: HttpStatus.OK,
+      data: galleries,
+    };
+  }
 
   @Get('by-user/:id')
   @ApiOperation({ summary: 'Get gallery by user id' })

@@ -220,21 +220,6 @@ export class ProductsService {
   async remove(id: number): Promise<void> {
     try {
       this.logger.debug('Attempting to remove product', String(id));
-      const product = await this.findOne(id);
-
-      // Delete associated files from storage
-      if (product.mediaUrls && product.mediaUrls.length > 0) {
-        await Promise.all(
-          product.mediaUrls.map(async url => {
-            // Extract key from URL - assumes S3 format: https://bucket.s3.region.amazonaws.com/key
-            const key = url.split('.com/')[1];
-            if (key) {
-              await this.fileService.deleteFile(Number(key));
-            }
-          }),
-        );
-      }
-
       await this.productsRepository.softDelete(id);
       this.logger.log('Product removed successfully', String(id));
     } catch (error) {

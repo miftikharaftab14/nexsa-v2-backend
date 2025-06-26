@@ -8,7 +8,7 @@ export class DropCategoriesAndAssociationsTables1714000000004 implements Migrati
     `);
   }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
+  public async down(): Promise<void> {
     // No down migration for drop table
   }
 }
