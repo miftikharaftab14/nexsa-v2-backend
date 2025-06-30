@@ -34,6 +34,7 @@ import { JwtService } from '@nestjs/jwt';
 export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private logger: Logger = new Logger('ChatGateway');
+  private userSocketMap = new Map<bigint, string>();
 
   constructor(
     private readonly chatService: ChatService,
@@ -74,6 +75,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       }
       // Attach user info to socket
       (client as any).user = user;
+      this.userSocketMap.set(user.id, client.id);
       this.logger.log(`Client connected: ${client.id}, userId: ${user.id}`);
     } catch (err) {
       client.disconnect();
@@ -82,6 +84,10 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
   handleDisconnect(client: Socket) {
+    const user = (client as any).user;
+    if (user) {
+      this.userSocketMap.delete(user.id);
+    }
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
@@ -91,17 +97,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       if (typeof data !== 'object' || data === null) {
         throw new BadRequestException('Invalid payload type. Expected an object.');
       }
-
       const user = (client as any).user;
       if (!user) {
         throw new UnauthorizedException('Unauthorized');
       }
-
       const sender = await this.userService.findOne(user.id);
       if (!sender) {
         throw new NotFoundException('Sender not found');
       }
-
       let contact: Contact | null = null;
       try {
         const contactResp = await this.contactService.findOne(data.contactId);
@@ -112,7 +115,6 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       if (!contact) {
         throw new NotFoundException('Chat/contact not found');
       }
-
       const message = await this.chatService.createMessage(
         contact,
         sender,
@@ -120,10 +122,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         data.content,
         data.mediaKey,
       );
-
-      this.server.emit('receive_message', message);
+      // Determine receiverId
+      const receiverId =
+        user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+      const receiverSocketId = this.userSocketMap.get(receiverId);
+      if (receiverSocketId) {
+        this.server.to(receiverSocketId).emit('receive_message', message);
+      }
     } catch (error) {
-      // For NestJS's built-in exceptions, the actual message is often in `error.response.message`
       const message = error.response?.message || error.message || 'An unexpected error occurred.';
       client.emit('error_message', { message });
     }
