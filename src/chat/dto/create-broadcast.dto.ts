@@ -1,15 +1,28 @@
-import { IsString, IsArray, IsNotEmpty, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsArray,
+  IsNotEmpty,
+  IsOptional,
+  ArrayNotEmpty,
+  IsNumber,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class CreateBroadcastDto {
-  @ApiProperty({ description: 'Name of the broadcast', example: 'Promo Customers' })
+  @ApiProperty({
+    description: 'Name of the broadcast',
+    example: 'Promo Customers',
+  })
+  @IsNotEmpty()
   @IsString()
   name: string;
 
   @ApiProperty({
-    description: 'Message to send in the broadcast',
+    description: 'Message to send',
     example: 'Special offer for you!',
   })
+  @IsNotEmpty()
   @IsString()
   message: string;
 
@@ -22,11 +35,23 @@ export class CreateBroadcastDto {
   mediaKey?: string;
 
   @ApiProperty({
-    description: 'List of contact IDs to send the broadcast to',
+    description:
+      'Array of contact IDs. In multipart/form-data, send as repeated fields: contactIds=1&contactIds=2',
+    example: [1, 2],
     type: [Number],
-    example: [1, 2, 3],
   })
   @IsArray()
-  @IsNotEmpty({ each: true })
+  @ArrayNotEmpty()
+  @Type(() => Number)
+  @IsNumber({}, { each: true })
   contactIds: number[];
+
+  @ApiProperty({
+    description: 'Media file (optional)',
+    type: 'string',
+    format: 'binary',
+    required: false,
+  })
+  @IsOptional()
+  media?: any;
 }

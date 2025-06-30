@@ -145,4 +145,8 @@ export class ChatService {
   async deleteChat(contactId: bigint): Promise<void> {
     // TODO: Implement logic to delete a chat
   }
+
+  async getBroadcastsBySeller(sellerId: bigint): Promise<Broadcast[]> {
+    return this.broadcastRepository.find({ where: { sellerId } });
+  }
 }

@@ -26,10 +26,14 @@ import {
   ApiResponse,
   ApiTags,
   ApiBearerAuth,
+  ApiParam,
 } from '@nestjs/swagger';
 import { FileSize } from 'src/common/constants/file';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../common/enums/user-role.enum';
+import { Broadcast } from './entities/broadcast.entity';
 
 @ApiTags('chats') // Swagger group
 @ApiBearerAuth() // Apply JWT auth header globally
@@ -103,5 +107,14 @@ export class ChatController {
     // Implement logic to delete a chat
     await this.chatService.deleteChat(BigInt(contactId));
     return { success: true };
+  }
+
+  @Get('broadcasts/by-seller/:sellerId')
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Get all broadcasts created by a seller' })
+  @ApiParam({ name: 'sellerId', type: 'string', description: 'Seller ID' })
+  @ApiResponse({ status: 200, description: 'List of broadcasts' })
+  async getBroadcastsBySeller(@Param('sellerId') sellerId: string): Promise<Broadcast[]> {
+    return this.chatService.getBroadcastsBySeller(BigInt(sellerId));
   }
 }
