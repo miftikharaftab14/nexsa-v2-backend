@@ -9,7 +9,14 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import {
+  Logger,
+  UsePipes,
+  ValidationPipe,
+  BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { SendBroadcastDto } from './dto/send-broadcast.dto';
@@ -17,7 +24,6 @@ import { ContactService } from 'src/contacts/services/contact.service';
 import { UserService } from 'src/users/services/user.service';
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException } from '@nestjs/common';
 
 @WebSocketGateway({
   cors: {
@@ -81,44 +87,46 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   @SubscribeMessage('send_message')
   async handleSendMessage(@MessageBody() data: SendMessageDto, @ConnectedSocket() client: Socket) {
-    // Fetch user from socket
-    const user = (client as any).user;
-    if (!user) {
-      this.server.to(client.id).emit('error', { message: 'Unauthorized' });
-      return;
-    }
-    // Use user.id as senderId
-    const sender = await this.userService.findOne(user.id);
-    if (!sender) {
-      this.server.to(client.id).emit('error', { message: 'Sender not found' });
-      return;
-    }
-    // Validate or create contact (chat)
-    let contact: Contact | null = null;
     try {
-      const contactResp = await this.contactService.findOne(Number(data.contactId));
-      contact = contactResp?.data;
-    } catch (e) {
-      contact = null;
-    }
-    if (!contact) {
-      // Optionally, create a new contact/chat if not found (customize as needed)
-      // You may need more info (seller_id, invited_user_id, etc.)
-      this.server.to(client.id).emit('error', { message: 'Chat/contact not found' });
-      return;
-    }
-    // Store message in DB
-    const message = await this.chatService.createMessage(
-      contact,
-      sender,
-      data.messageType,
-      data.content,
-      data.mediaKey,
-    );
-    console.log('-----------------------');
+      if (typeof data !== 'object' || data === null) {
+        throw new BadRequestException('Invalid payload type. Expected an object.');
+      }
 
-    // Emit the stored message to all clients in the chat
-    this.server.emit('receive_message', message);
+      const user = (client as any).user;
+      if (!user) {
+        throw new UnauthorizedException('Unauthorized');
+      }
+
+      const sender = await this.userService.findOne(user.id);
+      if (!sender) {
+        throw new NotFoundException('Sender not found');
+      }
+
+      let contact: Contact | null = null;
+      try {
+        const contactResp = await this.contactService.findOne(data.contactId);
+        contact = contactResp?.data;
+      } catch (e) {
+        contact = null;
+      }
+      if (!contact) {
+        throw new NotFoundException('Chat/contact not found');
+      }
+
+      const message = await this.chatService.createMessage(
+        contact,
+        sender,
+        data.messageType,
+        data.content,
+        data.mediaKey,
+      );
+
+      this.server.emit('receive_message', message);
+    } catch (error) {
+      // For NestJS's built-in exceptions, the actual message is often in `error.response.message`
+      const message = error.response?.message || error.message || 'An unexpected error occurred.';
+      client.emit('error_message', { message });
+    }
   }
 
   @SubscribeMessage('send_broadcast')

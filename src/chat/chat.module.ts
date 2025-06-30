@@ -10,10 +10,11 @@ import { UserModule } from 'src/users/user.module';
 import { ContactsModule } from 'src/contacts/contacts.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
+import { Contact } from 'src/contacts/entities/contact.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Message, Broadcast, BroadcastRecipient]),
+    TypeOrmModule.forFeature([Message, Broadcast, BroadcastRecipient, Contact]),
     UserModule,
     ContactsModule,
     AuthModule,

@@ -19,6 +19,8 @@ export class ChatService {
     private readonly broadcastRepository: Repository<Broadcast>,
     @InjectRepository(BroadcastRecipient)
     private readonly broadcastRecipientRepository: Repository<BroadcastRecipient>,
+    @InjectRepository(Contact)
+    private readonly contactRepository: Repository<Contact>,
     private readonly userService: UserService,
   ) {}
 
@@ -108,8 +110,36 @@ export class ChatService {
   }
 
   async getAllChatsForCurrentUser(userId: bigint, role: string): Promise<any[]> {
-    // TODO: Implement logic to get all chats for the current user by role
-    return [];
+    // Find all contacts where the user is a participant
+    const contacts = await this.contactRepository.find({
+      where: [{ seller_id: userId }, { invited_user_id: userId }],
+      relations: ['invited_user'],
+      order: { updated_at: 'DESC' },
+    });
+
+    // For each contact, check if there are messages and count unread
+    const result: User | { unreadMessagesCount: number }[] = [];
+    for (const contact of contacts) {
+      // Only include chats with at least one message
+      const messageCount = await this.messageRepository.count({ where: { contactId: contact.id } });
+      if (messageCount === 0) continue;
+
+      // Count unread messages for this user (assuming Message has 'read' and 'senderId')
+      const unreadMessagesCount = await this.messageRepository.count({
+        where: {
+          contactId: contact.id,
+          read: false,
+          // Unread for the user: not sent by the user
+          senderId: contact.seller_id === userId ? contact.invited_user_id : contact.seller_id,
+        },
+      });
+
+      result.push({
+        ...contact.invited_user,
+        unreadMessagesCount,
+      });
+    }
+    return result;
   }
 
   async deleteChat(contactId: bigint): Promise<void> {
