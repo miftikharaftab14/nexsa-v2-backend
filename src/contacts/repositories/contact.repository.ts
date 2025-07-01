@@ -25,13 +25,13 @@ export class ContactRepository extends BaseRepository<Contact> {
         .createQueryBuilder('contact')
         .innerJoin('users', 'seller', 'seller.id = contact.seller_id')
 
-        // Left join subquery to count galleriess per seller
+        // Left join subquery to count galleries per seller
         .leftJoin(
           qb =>
             qb
               .select('p.user_id', 'seller_id')
-              .addSelect('COUNT(*)', 'total_galleriess_count')
-              .from('galleriess', 'p')
+              .addSelect('COUNT(*)', 'total_gallery_image_count')
+              .from('gallery_image', 'p')
               .where('p.is_deleted = false')
               .groupBy('p.user_id'),
           'prod_count',
@@ -58,7 +58,7 @@ export class ContactRepository extends BaseRepository<Contact> {
           'seller.email AS email',
           'seller.profile_picture AS profile_picture',
           'COALESCE(gallery_count.total_galleries_count, 0) AS total_galleries_count',
-          'COALESCE(prod_count.total_galleriess_count, 0) AS total_galleriess_count',
+          'COALESCE(prod_count.total_gallery_image_count, 0) AS total_gallery_image_count',
         ])
         .where('contact.invited_user_id = :customerId', { customerId: BigInt(customerId) })
         .andWhere('contact.status = :status', { status: ContactStatus.ACCEPTED })

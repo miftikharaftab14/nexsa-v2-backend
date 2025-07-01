@@ -28,17 +28,23 @@ export class GalleryService {
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
   ) {}
-  async convertGalleryImagesPresignedUrl(galleries: Gallery[]) {
+  async convertGalleryImagesPresignedUrl(galleries: Gallery[]): Promise<Gallery[]> {
     return await Promise.all(
-      galleries.map(async gallery => ({
-        ...gallery,
-        galleryImages: await Promise.all(
-          (gallery.galleryImages || []).map(async galleries => ({
-            ...galleries,
-            mediaUrls: await this.fileService.getPresignedUrl(galleries.mediaFileId, 3600),
-          })),
-        ),
-      })),
+      galleries.map(async gallery => {
+        return {
+          ...gallery,
+          profileGallery: await this.fileService.getPresignedUrl(
+            gallery.profileGalleryImageId,
+            3600,
+          ),
+          galleryImages: await Promise.all(
+            (gallery.galleryImages || gallery['gallery_images'] || []).map(async galleries => ({
+              ...galleries,
+              mediaUrl: await this.fileService.getPresignedUrl(galleries['mediaFileId'], 3600),
+            })),
+          ),
+        };
+      }),
     );
   }
   async create(createGalleryDto: CreateGalleryDto, sellerId: bigint): Promise<Gallery> {
@@ -75,6 +81,7 @@ export class GalleryService {
     sellerId: number | bigint,
     userId: number | bigint,
   ): Promise<Gallery[] | null> {
+    console.log({ userId, sellerId });
     const user = await this.usersService.findOne(sellerId);
     if (!user) {
       throw new NotFoundException(`User with ID ${sellerId} not found`);
@@ -91,31 +98,29 @@ export class GalleryService {
     const galleries: Gallery[] = await this.galleriesRepository
       .createQueryBuilder('gallery')
       .select([
-        'gallery.id AS gallery_id',
-        'gallery.name AS gallery_name',
-        'pc.total_galleriess_count AS total_galleriess_count',
+        'gallery.id AS id',
+        'gallery.name AS name',
+        'pc.total_gallery_image_count AS total_gallery_image_count',
         `
       COALESCE(
         JSON_AGG(
           JSON_BUILD_OBJECT(
             'id', lp.id,
-            'name', lp.name,
-            'description', lp.description,
-            'mediaUrls', lp.media_urls,
+            'media_file_id', lp.media_file_id,
             'created_at', lp.created_at,
             'updated_at', lp.updated_at,
             'liked', (
               SELECT EXISTS (
                 SELECT 1
-                FROM galleries_likes pl
-                WHERE pl.galleries_id = lp.id AND pl.customer_id = :userId
+                FROM gallery_image_likes pl
+                WHERE pl.gallery_image_id = lp.id AND pl.customer_id = :userId
               )
             )
           )
           ORDER BY lp.created_at DESC
         ) FILTER (WHERE lp.id IS NOT NULL),
         '[]'
-      ) AS galleriess
+      ) AS "galleryImages"
     `,
       ])
       .leftJoin(
@@ -126,19 +131,19 @@ export class GalleryService {
               'ROW_NUMBER() OVER (PARTITION BY p.gallery_id ORDER BY p.created_at DESC)',
               'row_num',
             )
-            .from('galleriess', 'p')
+            .from('gallery_image', 'p')
             .where('p.user_id = :sellerId', { sellerId })
             .andWhere('p.is_deleted = false'),
         'lp',
         'lp.gallery_id = gallery.id AND lp.row_num <= 3',
       )
-      // Join to get total galleriess count
+      // Join to get total gallery_image count
       .leftJoin(
         qb =>
           qb
             .select('p.gallery_id', 'gallery_id')
-            .addSelect('COUNT(*)', 'total_galleriess_count')
-            .from('galleriess', 'p')
+            .addSelect('COUNT(*)', 'total_gallery_image_count')
+            .from('gallery_image', 'p')
             .where('p.user_id = :sellerId', { sellerId })
             .andWhere('p.is_deleted = false')
             .groupBy('p.gallery_id'),
@@ -147,7 +152,7 @@ export class GalleryService {
       )
       .where('gallery.user_id = :sellerId')
       .andWhere('gallery.is_deleted = false')
-      .groupBy('gallery.id, gallery.name, pc.total_galleriess_count')
+      .groupBy('gallery.id, gallery.name, pc.total_gallery_image_count')
       .orderBy('gallery.id', 'ASC')
       .setParameters({ userId, sellerId }) // Pass both userId and sellerId
       .getRawMany();
@@ -158,7 +163,7 @@ export class GalleryService {
   async findOne(id: number): Promise<Gallery> {
     const gallery = await this.galleriesRepository.findOne({
       where: { id, is_deleted: false },
-      relations: ['galleriess'],
+      relations: ['galleryImages'],
     });
     if (!gallery) {
       throw new NotFoundException('Gallery not found');
@@ -167,9 +172,17 @@ export class GalleryService {
     return singleGallery;
   }
 
-  async update(id: number, updateGalleryDto: UpdateGalleryDto): Promise<Gallery> {
+  async update(
+    id: number,
+    updateGalleryDto: UpdateGalleryDto,
+    image?: Express.Multer.File,
+  ): Promise<Gallery> {
     const gallery = await this.findOne(id);
     Object.assign(gallery, updateGalleryDto);
+    if (image) {
+      const uploadedFile = await this.fileService.uploadFile(image);
+      gallery.profileGalleryImageId = uploadedFile.id;
+    }
     return this.galleriesRepository.save(gallery);
   }
 

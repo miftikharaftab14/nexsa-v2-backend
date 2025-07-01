@@ -39,7 +39,7 @@ export class GalleryImage {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @OneToMany(() => GalleryImageLike, like => like.galleries, { cascade: true })
+  @OneToMany(() => GalleryImageLike, like => like.galleryImage, { cascade: true })
   likes: GalleryImageLike[];
 
   @Column({ default: false })

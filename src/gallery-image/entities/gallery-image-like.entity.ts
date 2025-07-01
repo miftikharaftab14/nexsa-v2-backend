@@ -10,17 +10,17 @@ import {
 import { GalleryImage } from './gallery-image.entity';
 import { User } from '../../users/entities/user.entity';
 
-@Entity('galleries_likes')
+@Entity('gallery_image_likes') // Fixed table name
 export class GalleryImageLike {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'galleries_id' })
-  galleriesId: number;
+  @Column({ name: 'gallery_image_id' }) // Fixed column name
+  galleryImageId: number;
 
-  @ManyToOne(() => GalleryImage, galleries => galleries.id, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'galleries_id' })
-  galleries: GalleryImage;
+  @ManyToOne(() => GalleryImage, galleryImage => galleryImage.id, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'gallery_image_id' }) // Should match column
+  galleryImage: GalleryImage;
 
   @Column({ name: 'customer_id', type: 'bigint' })
   customerId: bigint;

@@ -11,7 +11,7 @@ export class GalleryImageLikeRepository extends BaseRepository<GalleryImageLike>
   }
 
   async findOneByGalleryImageAndCustomer(galleriesId: number, customerId: bigint) {
-    return this.repository.findOneBy({ galleriesId, customerId });
+    return this.repository.findOneBy({ galleryImageId: galleriesId, customerId });
   }
 
   // Add custom methods if needed

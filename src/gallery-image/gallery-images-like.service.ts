@@ -35,7 +35,10 @@ export class GalleryImageLikeService {
       );
       if (like) throw new ConflictException('Already liked this galleries');
 
-      const createdLike = await this.galleryImageLikeRepository.create({ galleriesId, customerId });
+      const createdLike = await this.galleryImageLikeRepository.create({
+        galleryImageId: galleriesId,
+        customerId,
+      });
       this.logger.log('GalleryImage liked successfully', `${galleriesId},${customerId}`);
       return createdLike;
     } catch (error) {

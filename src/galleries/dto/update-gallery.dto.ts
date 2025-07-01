@@ -11,12 +11,15 @@ export class UpdateGalleryDto {
   @IsString()
   name?: string;
 
+  @IsOptional()
+  notificationsEnabled?: boolean;
+
   @ApiProperty({
-    description: 'Description of the gallery',
-    example: 'A collection of modern art pieces',
+    description: 'Profile image for the gallery (file upload)',
+    type: 'string',
+    format: 'binary',
     required: false,
   })
   @IsOptional()
-  @IsString()
-  description?: string;
+  image?: any; // Will be handled by multer, not validated by class-validator
 }

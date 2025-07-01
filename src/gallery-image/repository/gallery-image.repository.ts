@@ -20,24 +20,24 @@ export class GalleryImageRepository extends BaseRepository<GalleryImage> {
     customerId: bigint,
   ): Promise<GalleryImage[]> {
     return this.repository
-      .createQueryBuilder('galleries')
-      .leftJoin('galleries.gallery', 'gallery')
+      .createQueryBuilder('gi') // alias for gallery_image
+      .leftJoin('galleries', 'g', 'g.id = gi.gallery_id')
       .leftJoin(
-        'galleries_likes',
+        'gallery_image_likes',
         'like',
-        'like.galleries_id = galleries.id AND like.customer_id = :customerId',
+        'like.gallery_image_id = gi.id AND like.customer_id = :customerId',
         { customerId },
       )
-      .where('galleries.user_id = :userId', { userId })
-      .andWhere('galleries.gallery_id = :galleryId', { galleryId })
-      .andWhere('galleries.is_deleted = false')
+      .where('gi.user_id = :userId', { userId })
+      .andWhere('gi.gallery_id = :galleryId', { galleryId })
+      .andWhere('gi.is_deleted = false')
       .select([
-        'galleries.id AS id',
-        'galleries.media_file_id AS "mediaFileId"',
-        'galleries.userId AS "userId"',
-        'galleries.createdAt AS "createdAt"',
-        'galleries.updatedAt AS "updatedAt"',
-        'gallery.id AS "galleryId"',
+        'gi.id AS id',
+        'gi.media_file_id AS "mediaFileId"',
+        'gi.user_id AS "userId"',
+        'gi.created_at AS "createdAt"',
+        'gi.updated_at AS "updatedAt"',
+        'g.id AS "galleryId"',
         'CASE WHEN like.id IS NOT NULL THEN true ELSE false END AS "liked"',
       ])
       .getRawMany();
