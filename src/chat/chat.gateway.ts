@@ -27,7 +27,7 @@ import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Adjust for production
+    origin: '*', // Adjust for galleriesion
   },
   namespace: '/chat',
 })
@@ -47,10 +47,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.logger.log('ChatGateway Initialized!');
   }
 
-  async handleConnection(client: Socket, ...args: any[]) {
+  async handleConnection(client: Socket) {
     try {
       // Extract JWT from handshake headers
-      const authHeader = client.handshake.headers['authorization'] || client.handshake.auth?.token;
+      const authHeader: string = (client.handshake.headers['authorization'] ||
+        client.handshake.auth?.token) as string;
       if (!authHeader) {
         client.disconnect();
         throw new UnauthorizedException('No token provided');

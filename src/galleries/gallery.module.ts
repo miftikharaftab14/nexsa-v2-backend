@@ -6,11 +6,11 @@ import { GalleryController } from './gallery.controller';
 import { UserModule } from '../users/user.module';
 import { InvitationsModule } from 'src/invitations/invitations.module';
 import { FilesModule } from 'src/files/files.module';
-import { Product } from 'src/products/entities/product.entity';
+import { GalleryImage } from 'src/gallery-image/entities/gallery-image.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Gallery, Product]),
+    TypeOrmModule.forFeature([Gallery, GalleryImage]),
     UserModule,
     InvitationsModule,
     FilesModule,

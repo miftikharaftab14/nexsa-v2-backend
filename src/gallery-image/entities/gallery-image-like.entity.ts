@@ -7,20 +7,20 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Product } from './product.entity';
+import { GalleryImage } from './gallery-image.entity';
 import { User } from '../../users/entities/user.entity';
 
-@Entity('product_likes')
-export class ProductLike {
+@Entity('galleries_likes')
+export class GalleryImageLike {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'product_id' })
-  productId: number;
+  @Column({ name: 'galleries_id' })
+  galleriesId: number;
 
-  @ManyToOne(() => Product, product => product.id, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'product_id' })
-  product: Product;
+  @ManyToOne(() => GalleryImage, galleries => galleries.id, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'galleries_id' })
+  galleries: GalleryImage;
 
   @Column({ name: 'customer_id', type: 'bigint' })
   customerId: bigint;

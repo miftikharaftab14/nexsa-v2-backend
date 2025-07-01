@@ -12,7 +12,7 @@ import { CommonModule } from './common/common.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { FilesModule } from './files/files.module';
-import { ProductsModule } from './products/products.module';
+import { GalleryImagesModule } from './gallery-image/gallery-images.module';
 import { ChatModule } from './chat/chat.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { GalleryModule } from './galleries/gallery.module';
@@ -33,7 +33,7 @@ import { GalleryModule } from './galleries/gallery.module';
     ContactsModule,
     InvitationsModule,
     FilesModule,
-    ProductsModule,
+    GalleryImagesModule,
     PreferencesModule,
     GalleryModule,
   ],

@@ -1,0 +1,228 @@
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  UnauthorizedException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
+import { GalleryImageRepository } from './repository/gallery-image.repository';
+import { InjectionToken } from '../common/constants/injection-tokens';
+import { FileService } from '../files/services/file.service';
+import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
+import { GalleryImage } from './entities/gallery-image.entity';
+import { UserService } from 'src/users/services/user.service';
+import { UpdateGalleryImageDto } from './dto/update-gallery-image.dto';
+import { UserDeviceTokenService } from '../users/services/user-device-token.service';
+import { NotificationService } from '../common/services/notification.service';
+import { ContactService } from '../contacts/services/contact.service';
+import { GalleryService } from 'src/galleries/gallery.service';
+import { Gallery } from 'src/galleries/entities/gallery.entity';
+
+@Injectable()
+export class GalleryImagesService {
+  private readonly logger = new Logger('GalleryImagesService');
+  constructor(
+    private readonly galleryImagesRepository: GalleryImageRepository,
+    private readonly galleryService: GalleryService,
+    private readonly userService: UserService,
+    @Inject(InjectionToken.FILE_SERVICE)
+    private readonly fileService: FileService,
+    private readonly userDeviceTokenService: UserDeviceTokenService,
+    private readonly notificationService: NotificationService,
+    private readonly contactService: ContactService,
+  ) {}
+
+  async convertGalleryImagePresignedUrl(galleryImage: GalleryImage) {
+    try {
+      this.logger.debug('Attempting to convert gallery image presigned URL');
+      return {
+        ...galleryImage,
+        mediaUrl: galleryImage.mediaFileId
+          ? await this.fileService.getPresignedUrl(galleryImage.mediaFileId, 3600)
+          : '',
+      };
+    } catch (error) {
+      this.logger.error('Failed to convert gallery image presigned URL', error);
+      throw new InternalServerErrorException('Failed to convert gallery image presigned URL');
+    }
+  }
+
+  async createGalleryImage(
+    dto: CreateGalleryImageDto,
+    image: Express.Multer.File | undefined,
+    sellerId: number | bigint,
+  ): Promise<GalleryImage> {
+    try {
+      this.logger.debug('Attempting to create gallery image', String(sellerId));
+      const user = await this.userService.findOne(sellerId);
+      if (!user) {
+        throw new UnauthorizedException(`User with ID ${sellerId} not found`);
+      }
+      // Validate gallery exists
+      const gallery: Gallery = await this.galleryService.findOne(dto.galleryId);
+
+      // Only allow one image
+      if (!image) {
+        throw new InternalServerErrorException('At least one image is required');
+      }
+      const file = image;
+      const uploadedFile = await this.fileService.uploadFile(file, 'gallery-images');
+
+      // Create gallery image entity
+      const galleryImage = await this.galleryImagesRepository.create({
+        gallery,
+        userId: user.id,
+        mediaFileId: uploadedFile.id,
+      });
+      this.logger.log('GalleryImage created successfully', String(galleryImage.id));
+
+      // Send push notification to all customers of the seller
+      try {
+        const contacts = await this.contactService.findBySellerId(sellerId);
+        const customerIds = (contacts.data || []).map(c => c.invited_user_id).filter(Boolean);
+        if (customerIds.length > 0) {
+          const tokensArr = await this.userDeviceTokenService.getTokensByUsers(customerIds);
+          const tokens = tokensArr.flat().filter(Boolean);
+          if (tokens.length > 0) {
+            await this.notificationService.sendPushNotification(
+              tokens,
+              'New GalleryImage Available!',
+              `A new gallery image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
+              {
+                galleryImageId: String(galleryImage.id),
+                galleryId: String(gallery.id),
+                type: 'galleryImage',
+                screen: 'CustomerGalleryImageDetail',
+              },
+            );
+          }
+        }
+      } catch (notifyError) {
+        this.logger.error(
+          'Failed to send push notification after gallery image creation',
+          notifyError,
+        );
+      }
+      return galleryImage;
+    } catch (error) {
+      this.logger.error('Failed to create gallery image', error);
+      throw error instanceof UnauthorizedException
+        ? error
+        : new InternalServerErrorException('Failed to create gallery image');
+    }
+  }
+
+  async findAllBySeller(
+    sellerId: number | bigint,
+    galleryId: number,
+    customerId: bigint,
+  ): Promise<GalleryImage[]> {
+    try {
+      this.logger.debug('Attempting to fetch all gallery images by seller', String(sellerId));
+      const user = await this.userService.findOne(sellerId);
+      if (!user) {
+        throw new UnauthorizedException(`User with ID ${sellerId} not found`);
+      }
+      const galleryImages = await this.galleryImagesRepository.findAllBySeller(
+        user.id,
+        galleryId,
+        customerId,
+      );
+      const result = await Promise.all(
+        galleryImages.map(galleryImage => this.convertGalleryImagePresignedUrl(galleryImage)),
+      );
+      this.logger.log('Fetched all gallery images by seller successfully', String(sellerId));
+      return result.filter(img => !!img && typeof img.mediaUrl === 'string');
+    } catch (error) {
+      this.logger.error('Failed to fetch all gallery images by seller', error);
+      throw error instanceof UnauthorizedException
+        ? error
+        : new InternalServerErrorException('Failed to fetch all gallery images by seller');
+    }
+  }
+
+  async findOne(id: number): Promise<GalleryImage> {
+    try {
+      this.logger.debug('Attempting to fetch gallery image', String(id));
+      const galleryImage = await this.galleryImagesRepository.findOneById(id);
+      if (!galleryImage) {
+        throw new NotFoundException(`GalleryImage with ID ${id} not found`);
+      }
+      const result = await this.convertGalleryImagePresignedUrl(galleryImage);
+      this.logger.log('Fetched gallery image successfully', String(id));
+      if (!result || typeof result.mediaUrl !== 'string') throw new NotFoundException();
+      return result as GalleryImage;
+    } catch (error) {
+      this.logger.error('Failed to fetch gallery image', error);
+      throw error instanceof NotFoundException
+        ? error
+        : new InternalServerErrorException('Failed to fetch gallery image');
+    }
+  }
+
+  async update(id: number, updateGalleryImageDto: UpdateGalleryImageDto): Promise<GalleryImage> {
+    try {
+      this.logger.debug(`Attempting to update gallery image with ID: ${id}`);
+      // Ensure gallery image exists
+      const galleryImage = await this.galleryImagesRepository.findOneById(id);
+      if (!galleryImage) {
+        throw new NotFoundException(`GalleryImage with ID ${id} not found`);
+      }
+      await this.galleryImagesRepository.update(id, updateGalleryImageDto);
+      this.logger.log(`GalleryImage with ID ${id} updated successfully`);
+      return this.findOne(id);
+    } catch (error) {
+      this.logger.error(`Failed to update gallery image with ID ${id}`, error);
+      throw error instanceof NotFoundException
+        ? error
+        : new InternalServerErrorException('Failed to update gallery image');
+    }
+  }
+
+  async remove(id: number): Promise<void> {
+    try {
+      this.logger.debug('Attempting to remove gallery image', String(id));
+      await this.galleryImagesRepository.softDelete(id);
+      this.logger.log('GalleryImage removed successfully', String(id));
+    } catch (error) {
+      this.logger.error('Failed to remove gallery image', error);
+      throw new InternalServerErrorException('Failed to remove gallery image');
+    }
+  }
+
+  async uploadImage(galleryImageId: number, file: Express.Multer.File): Promise<GalleryImage> {
+    try {
+      this.logger.debug('Attempting to upload image for gallery image', String(galleryImageId));
+      const uploadedFile = await this.fileService.uploadFile(file, 'gallery-images');
+      await this.galleryImagesRepository.update(galleryImageId, {
+        mediaFileId: uploadedFile.id,
+      });
+      this.logger.log('Uploaded image for gallery image successfully', String(galleryImageId));
+      const galleryImage = await this.galleryImagesRepository.findOneById(galleryImageId);
+      if (!galleryImage) throw new NotFoundException();
+      return galleryImage;
+    } catch (error) {
+      this.logger.error('Failed to upload image for gallery image', error);
+      throw new InternalServerErrorException('Failed to upload image for gallery image');
+    }
+  }
+
+  async removeImage(galleryImageId: number): Promise<GalleryImage> {
+    try {
+      this.logger.debug('Attempting to remove image from gallery image', String(galleryImageId));
+      await this.galleryImagesRepository.update(galleryImageId, { mediaFileId: undefined });
+      this.logger.log('Removed image from gallery image successfully', String(galleryImageId));
+      const galleryImage = await this.galleryImagesRepository.findOneById(galleryImageId);
+      if (!galleryImage) throw new NotFoundException();
+      return galleryImage;
+    } catch (error) {
+      this.logger.error('Failed to remove image from gallery image', error);
+      throw new InternalServerErrorException('Failed to remove image from gallery image');
+    }
+  }
+
+  async softDeleteByGalleryId(galleryId: number): Promise<void> {
+    await this.galleryImagesRepository.softDeleteByGalleryId(galleryId);
+  }
+}

@@ -4,7 +4,7 @@ import { Descriptions } from 'src/common/enums/descriptions.enum';
 import { ApiProperty } from '@nestjs/swagger';
 import { Express } from 'express';
 
-export class CreateProductDto {
+export class CreateGalleryImageDto {
   @IsNotEmpty()
   @IsString()
   name: string;

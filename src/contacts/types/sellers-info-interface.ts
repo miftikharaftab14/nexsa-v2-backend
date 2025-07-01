@@ -4,6 +4,6 @@ export interface SellerInfoType {
   username: string;
   email: string | null;
   total_categories_count: string;
-  total_products_count: string;
+  total_galleriess_count: string;
   profile_picture: string | number | null;
 }

@@ -8,8 +8,8 @@ import {
   OneToOne,
 } from 'typeorm';
 import { UserRole } from '../../common/enums/user-role.enum';
-import { Product } from '../../products/entities/product.entity';
-import { ProductLike } from '../../products/entities/product-like.entity';
+import { GalleryImage } from '../../gallery-image/entities/gallery-image.entity';
+import { GalleryImageLike } from '../../gallery-image/entities/gallery-image-like.entity';
 import { UserDeviceToken } from './user-device-token.entity';
 import { Gallery } from '../../galleries/entities/gallery.entity';
 
@@ -34,11 +34,11 @@ export class User {
   })
   role: UserRole;
 
-  @OneToMany(() => ProductLike, like => like.customer)
-  likes: ProductLike[];
+  @OneToMany(() => GalleryImageLike, like => like.customer)
+  likes: GalleryImageLike[];
 
-  @OneToMany(() => Product, product => product.user)
-  products: Product[];
+  @OneToMany(() => GalleryImage, galleryImage => galleryImage.user)
+  galleryImages: GalleryImage[];
 
   @Column({ type: 'text', nullable: true })
   profile_picture: string;

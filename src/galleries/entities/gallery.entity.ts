@@ -9,7 +9,8 @@ import {
   OneToMany,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Product } from '../../products/entities/product.entity';
+import { GalleryImage } from '../../gallery-image/entities/gallery-image.entity';
+import { File } from '../../files/entities/file.entity';
 
 @Entity('galleries')
 export class Gallery {
@@ -35,9 +36,19 @@ export class Gallery {
   @UpdateDateColumn({ name: 'updated_at' })
   updated_at: Date;
 
-  @OneToMany(() => Product, product => product.gallery)
-  products: Product[];
+  @OneToMany(() => GalleryImage, galleryImage => galleryImage.gallery)
+  galleryImages: GalleryImage[];
 
   @Column({ default: false })
   is_deleted: boolean;
+
+  @Column({ name: 'notifications_enabled', type: 'boolean', default: true })
+  notificationsEnabled: boolean;
+
+  @Column({ name: 'profile_gallery_image', type: 'bigint', nullable: true })
+  profileGalleryImageId: number;
+
+  @ManyToOne(() => File, { nullable: true })
+  @JoinColumn({ name: 'profile_gallery_image' })
+  profileGalleryImage: File;
 }

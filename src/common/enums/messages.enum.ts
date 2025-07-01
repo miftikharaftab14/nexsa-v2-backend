@@ -80,22 +80,22 @@ export enum Messages {
   CATEGORIES_FETCHED = 'Categories fetched successfully',
   CATEGORY_NOT_FOUND = 'Category not found',
 
-  // Product Messages
-  PRODUCT_CREATED = 'Product created successfully',
-  PRODUCT_CREATION_FAILED = 'Failed to create product',
+  // GalleryImage Messages
+  PRODUCT_CREATED = 'GalleryImage created successfully',
+  PRODUCT_CREATION_FAILED = 'Failed to create galleries',
 
-  PRODUCT_UPDATED = 'Product updated successfully',
-  PRODUCT_UPDATE_FAILED = 'Failed to update product',
+  PRODUCT_UPDATED = 'GalleryImage updated successfully',
+  PRODUCT_UPDATE_FAILED = 'Failed to update galleries',
 
-  PRODUCT_DELETED = 'Product deleted successfully',
-  PRODUCT_DELETION_FAILED = 'Failed to delete product',
+  PRODUCT_DELETED = 'GalleryImage deleted successfully',
+  PRODUCT_DELETION_FAILED = 'Failed to delete galleries',
 
-  PRODUCT_FETCHED = 'Product fetched successfully',
-  PRODUCTS_FETCHED = 'Products fetched successfully',
-  PRODUCT_NOT_FOUND = 'Product not found',
+  PRODUCT_FETCHED = 'GalleryImage fetched successfully',
+  PRODUCTS_FETCHED = 'GalleryImages fetched successfully',
+  PRODUCT_NOT_FOUND = 'GalleryImage not found',
 
-  PRODUCTS_LIKED = 'Products liked successfully',
-  PRODUCTS_UNLIKED = 'Products unliked successfully',
-  PRODUCTS_LIKES_FETCHED = 'Products likes fetched successfully',
-  PRODUCTS_LIKE_FETCHED = 'Products like fetched successfully',
+  PRODUCTS_LIKED = 'GalleryImages liked successfully',
+  PRODUCTS_UNLIKED = 'GalleryImages unliked successfully',
+  PRODUCTS_LIKES_FETCHED = 'GalleryImages likes fetched successfully',
+  PRODUCTS_LIKE_FETCHED = 'GalleryImages like fetched successfully',
 }

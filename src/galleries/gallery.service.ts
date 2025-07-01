@@ -14,32 +14,28 @@ import { UpdateGalleryDto } from './dto/update-gallery.dto';
 import { InvitationService } from 'src/invitations/services/invitation.service';
 import { FileService } from 'src/files/services/file.service';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
-import { Product } from 'src/products/entities/product.entity';
+import { GalleryImage } from 'src/gallery-image/entities/gallery-image.entity';
 
 @Injectable()
 export class GalleryService {
   constructor(
     @InjectRepository(Gallery)
     private galleriesRepository: Repository<Gallery>,
-    @InjectRepository(Product)
-    private productRepository: Repository<Product>,
+    @InjectRepository(GalleryImage)
+    private galleryImageRepository: Repository<GalleryImage>,
     private readonly usersService: UserService,
     private readonly invitationService: InvitationService,
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
   ) {}
-  async convertProductsPresignedUrl(galleries: Gallery[]) {
+  async convertGalleryImagesPresignedUrl(galleries: Gallery[]) {
     return await Promise.all(
       galleries.map(async gallery => ({
         ...gallery,
-        products: await Promise.all(
-          (gallery.products || []).map(async product => ({
-            ...product,
-            mediaUrls: await Promise.all(
-              (product.mediaUrls ?? []).map(url =>
-                this.fileService.getPresignedUrlByKey(url, 3600),
-              ),
-            ),
+        galleryImages: await Promise.all(
+          (gallery.galleryImages || []).map(async galleries => ({
+            ...galleries,
+            mediaUrls: await this.fileService.getPresignedUrl(galleries.mediaFileId, 3600),
           })),
         ),
       })),
@@ -72,7 +68,7 @@ export class GalleryService {
       relations: ['user'],
       where: { userId, is_deleted: false },
     });
-    return this.convertProductsPresignedUrl(galleries);
+    return this.convertGalleryImagesPresignedUrl(galleries);
   }
 
   async findByUserId(
@@ -97,7 +93,7 @@ export class GalleryService {
       .select([
         'gallery.id AS gallery_id',
         'gallery.name AS gallery_name',
-        'pc.total_products_count AS total_products_count',
+        'pc.total_galleriess_count AS total_galleriess_count',
         `
       COALESCE(
         JSON_AGG(
@@ -111,15 +107,15 @@ export class GalleryService {
             'liked', (
               SELECT EXISTS (
                 SELECT 1
-                FROM product_likes pl
-                WHERE pl.product_id = lp.id AND pl.customer_id = :userId
+                FROM galleries_likes pl
+                WHERE pl.galleries_id = lp.id AND pl.customer_id = :userId
               )
             )
           )
           ORDER BY lp.created_at DESC
         ) FILTER (WHERE lp.id IS NOT NULL),
         '[]'
-      ) AS products
+      ) AS galleriess
     `,
       ])
       .leftJoin(
@@ -130,19 +126,19 @@ export class GalleryService {
               'ROW_NUMBER() OVER (PARTITION BY p.gallery_id ORDER BY p.created_at DESC)',
               'row_num',
             )
-            .from('products', 'p')
+            .from('galleriess', 'p')
             .where('p.user_id = :sellerId', { sellerId })
             .andWhere('p.is_deleted = false'),
         'lp',
         'lp.gallery_id = gallery.id AND lp.row_num <= 3',
       )
-      // Join to get total products count
+      // Join to get total galleriess count
       .leftJoin(
         qb =>
           qb
             .select('p.gallery_id', 'gallery_id')
-            .addSelect('COUNT(*)', 'total_products_count')
-            .from('products', 'p')
+            .addSelect('COUNT(*)', 'total_galleriess_count')
+            .from('galleriess', 'p')
             .where('p.user_id = :sellerId', { sellerId })
             .andWhere('p.is_deleted = false')
             .groupBy('p.gallery_id'),
@@ -151,23 +147,23 @@ export class GalleryService {
       )
       .where('gallery.user_id = :sellerId')
       .andWhere('gallery.is_deleted = false')
-      .groupBy('gallery.id, gallery.name, pc.total_products_count')
+      .groupBy('gallery.id, gallery.name, pc.total_galleriess_count')
       .orderBy('gallery.id', 'ASC')
       .setParameters({ userId, sellerId }) // Pass both userId and sellerId
       .getRawMany();
 
-    return this.convertProductsPresignedUrl(galleries);
+    return this.convertGalleryImagesPresignedUrl(galleries);
   }
 
   async findOne(id: number): Promise<Gallery> {
     const gallery = await this.galleriesRepository.findOne({
       where: { id, is_deleted: false },
-      relations: ['products'],
+      relations: ['galleriess'],
     });
     if (!gallery) {
       throw new NotFoundException('Gallery not found');
     }
-    const [singleGallery] = await this.convertProductsPresignedUrl([gallery]);
+    const [singleGallery] = await this.convertGalleryImagesPresignedUrl([gallery]);
     return singleGallery;
   }
 
@@ -178,7 +174,7 @@ export class GalleryService {
   }
 
   async remove(id: number): Promise<void> {
-    await this.productRepository.update({ galleryId: id }, { is_deleted: true });
+    await this.galleryImageRepository.update({ galleryId: id }, { is_deleted: true });
     await this.galleriesRepository.update(id, { is_deleted: true });
   }
 }
