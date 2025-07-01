@@ -44,6 +44,21 @@ export class File {
   @Column({ name: 'user_id', nullable: true })
   userId: number;
 
+  @Column({ nullable: true })
+  signedUrl?: string;
+
+  @Column({ name: 'signed_url_expire_at', type: 'timestamp', nullable: true })
+  signedUrlExpireAt?: Date;
+
+  @Column({ nullable: true })
+  thumbnailSignedUrl?: string;
+
+  @Column({ nullable: true })
+  thumbnailKey?: string;
+
+  @Column({ name: 'thumbnail_signed_url_expire_at', type: 'timestamp', nullable: true })
+  thumbnailSignedUrlExpireAt?: Date;
+
   @CreateDateColumn({ name: 'created_at', type: Date })
   createdAt: Date;
 

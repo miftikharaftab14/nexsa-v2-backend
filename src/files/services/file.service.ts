@@ -97,7 +97,17 @@ export class FileService {
       if (!file) {
         throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
       }
-      return this.s3Service.getPresignedUrl(file.key, expiresIn);
+      const now = new Date();
+      if (file.signedUrl && file.signedUrlExpireAt && file.signedUrlExpireAt > now) {
+        return file.signedUrl;
+      }
+      // Generate new signed URL
+      const url = await this.s3Service.getPresignedUrl(file.key, expiresIn);
+      const expireAt = new Date(now.getTime() + (expiresIn || 3600) * 1000);
+      file.signedUrl = url;
+      file.signedUrlExpireAt = expireAt;
+      await this.fileRepository.save(file);
+      return url;
     } catch (error: unknown) {
       this.logger.error(
         `Failed to get presigned URL: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -172,5 +182,33 @@ export class FileService {
       throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
     }
     return file;
+  }
+
+  async getThumbnailPresignedUrl(fileId: number, expiresIn?: number): Promise<string> {
+    const file = await this.fileRepository.findOneById(fileId);
+    if (!file) {
+      throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
+    }
+    const now = new Date();
+    if (
+      file.thumbnailSignedUrl &&
+      file.thumbnailSignedUrlExpireAt &&
+      file.thumbnailSignedUrlExpireAt > now
+    ) {
+      return file.thumbnailSignedUrl;
+    }
+    // Derive thumbnail key
+    const extIndex = file.key.lastIndexOf('.');
+    const thumbnailKey =
+      extIndex !== -1
+        ? `${file.key.slice(0, extIndex)}-thumbnail${file.key.slice(extIndex)}`
+        : `${file.key}-thumbnail`;
+    // Generate new signed URL
+    const url = await this.s3Service.getPresignedUrl(thumbnailKey, expiresIn);
+    const expireAt = new Date(now.getTime() + (expiresIn || 3600) * 1000);
+    file.thumbnailSignedUrl = url;
+    file.thumbnailSignedUrlExpireAt = expireAt;
+    await this.fileRepository.save(file);
+    return url;
   }
 }
