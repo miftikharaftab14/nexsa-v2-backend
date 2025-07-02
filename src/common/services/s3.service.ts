@@ -9,6 +9,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LogContexts } from '../enums/logging.enum';
+import * as sharp from 'sharp';
 
 @Injectable()
 export class S3Service {
@@ -36,22 +37,56 @@ export class S3Service {
     this.bucketName = bucketName;
   }
 
-  async uploadFile(file: Express.Multer.File, folder: string = 'uploads'): Promise<string> {
+  async uploadFile(
+    file: Express.Multer.File,
+    folder: string = 'uploads',
+  ): Promise<{ originalUrl: string; thumbnailUrl?: string }> {
     try {
-      const key = `${folder}/${Date.now()}-${file?.originalname}`;
+      const key = `${folder}/${Date.now()}-${file.originalname}`;
+      const contentType = file.mimetype;
 
-      const command = new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-      });
+      // Upload original file
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: file.buffer,
+          ContentType: contentType,
+        }),
+      );
 
-      await this.s3Client.send(command);
+      const region: string = this.configService.get('AWS_REGION') || '';
+      const originalUrl = `https://${this.bucketName}.s3.${region}.amazonaws.com/${key}`;
 
-      // Return the public URL
-      this.logger.log(key);
-      return `https://${this.bucketName}.s3.${this.configService.get('AWS_REGION')}.amazonaws.com/${key}`;
+      let thumbnailUrl: string | undefined = undefined;
+
+      // If it's an image, generate and upload a thumbnail
+      if (contentType.startsWith('image/')) {
+        const thumbBuffer = await sharp(file.buffer)
+          .resize(200, 200, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .toBuffer();
+
+        const thumbKey = `${folder}/thumbnails/${Date.now()}-thumb-${file.originalname}`;
+
+        await this.s3Client.send(
+          new PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: thumbKey,
+            Body: thumbBuffer,
+            ContentType: contentType,
+          }),
+        );
+
+        thumbnailUrl = `https://${this.bucketName}.s3.${region}.amazonaws.com/${thumbKey}`;
+      }
+
+      return {
+        originalUrl,
+        thumbnailUrl,
+      };
     } catch (error) {
       this.logger.error(
         `Failed to upload file to S3: ${error instanceof Error ? error.message : 'Unknown error'}`,

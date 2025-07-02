@@ -28,8 +28,12 @@ export class FileService {
 
   async uploadFile(file: Express.Multer.File, folder?: string): Promise<File> {
     try {
-      const url = await this.s3Service.uploadFile(file, folder || this.s3Folder);
+      const { originalUrl: url, thumbnailUrl } = await this.s3Service.uploadFile(
+        file,
+        folder || this.s3Folder,
+      );
       const key = url.split('.com/')[1];
+      const thumbnailKey = (thumbnailUrl?.split('.com/') || [])[1];
       //   const versions = await this.s3Service.getFileVersions(key);
       //   const versionId = versions[0];
 
@@ -40,6 +44,7 @@ export class FileService {
         mimeType: file.mimetype,
         size: file.size as FileSize.PROFILE_IMAGE_SIZE,
         folder: folder || this.s3Folder,
+        thumbnailKey,
         // versionId,
         // version: versions.length,
       };
@@ -189,26 +194,7 @@ export class FileService {
     if (!file) {
       throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
     }
-    const now = new Date();
-    if (
-      file.thumbnailSignedUrl &&
-      file.thumbnailSignedUrlExpireAt &&
-      file.thumbnailSignedUrlExpireAt > now
-    ) {
-      return file.thumbnailSignedUrl;
-    }
-    // Derive thumbnail key
-    const extIndex = file.key.lastIndexOf('.');
-    const thumbnailKey =
-      extIndex !== -1
-        ? `${file.key.slice(0, extIndex)}-thumbnail${file.key.slice(extIndex)}`
-        : `${file.key}-thumbnail`;
-    // Generate new signed URL
-    const url = await this.s3Service.getPresignedUrl(thumbnailKey, expiresIn);
-    const expireAt = new Date(now.getTime() + (expiresIn || 3600) * 1000);
-    file.thumbnailSignedUrl = url;
-    file.thumbnailSignedUrlExpireAt = expireAt;
-    await this.fileRepository.save(file);
-    return url;
+    if (file.thumbnailKey) return this.s3Service.getPresignedUrl(file.thumbnailKey, expiresIn);
+    else return '';
   }
 }

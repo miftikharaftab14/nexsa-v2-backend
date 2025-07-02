@@ -33,6 +33,10 @@ export class GalleryService {
       galleries.map(async gallery => {
         return {
           ...gallery,
+          profileThumbnail: await this.fileService.getThumbnailPresignedUrl(
+            gallery.profileGalleryImageId,
+            3600,
+          ),
           profileGallery: await this.fileService.getPresignedUrl(
             gallery.profileGalleryImageId,
             3600,
@@ -41,6 +45,10 @@ export class GalleryService {
             (gallery.galleryImages || gallery['gallery_images'] || []).map(async galleries => ({
               ...galleries,
               mediaUrl: await this.fileService.getPresignedUrl(galleries['mediaFileId'], 3600),
+              mediaThumbnail: await this.fileService.getThumbnailPresignedUrl(
+                galleries['mediaFileId'],
+                3600,
+              ),
             })),
           ),
         };

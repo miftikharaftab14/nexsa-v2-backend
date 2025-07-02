@@ -38,6 +38,9 @@ export class GalleryImagesService {
       this.logger.debug('Attempting to convert gallery image presigned URL');
       return {
         ...galleryImage,
+        thumbnail: galleryImage.mediaFileId
+          ? await this.fileService.getThumbnailPresignedUrl(galleryImage.mediaFileId, 3600)
+          : '',
         mediaUrl: galleryImage.mediaFileId
           ? await this.fileService.getPresignedUrl(galleryImage.mediaFileId, 3600)
           : '',
