@@ -14,7 +14,6 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
   UseGuards,
-  ValidationPipe,
 } from '@nestjs/common';
 import { GalleryImagesService } from './gallery-images.service';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -235,30 +234,23 @@ export class GalleryImagesController {
    * Update a gallery-image by ID
    */
   @Patch(':id')
-  @UseInterceptors(FilesInterceptor('image', 1)) // Accept only 1 image file
   @ApiOperation({ summary: 'Update gallery-image by ID' })
-  @ApiConsumes('multipart/form-data')
   @ApiBody({
     description: 'Update gallery-image',
     required: true,
     schema: {
       type: 'object',
       properties: {
-        galleryId: { type: 'number', example: 1 },
-        image: {
-          type: 'string',
-          format: 'binary',
-          description: 'Single gallery-image file',
-        },
+        on_sale: { type: 'boolean', example: false },
+        price: { type: 'number', example: 0 },
       },
-      required: ['galleryId'],
     },
   })
   @ApiResponse({ status: 200, description: 'GalleryImage updated successfully' })
   @ApiParam({ name: 'id', type: Number, description: 'GalleryImage ID' })
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false }))
+    @Body()
     updateGalleryImageDto: UpdateGalleryImageDto,
   ) {
     const result = await this.galleryImagesService.update(id, updateGalleryImageDto);

@@ -82,6 +82,7 @@ export class GalleryService {
       relations: ['user'],
       where: { userId, is_deleted: false },
     });
+
     return this.convertGalleryImagesPresignedUrl(galleries);
   }
 
@@ -107,6 +108,8 @@ export class GalleryService {
       .createQueryBuilder('gallery')
       .select([
         'gallery.id AS id',
+        'gallery.notificationsEnabled AS notificationsEnabled',
+        'gallery.profileGalleryImageId AS profileGalleryImageId',
         'gallery.name AS name',
         'pc.total_gallery_image_count AS total_gallery_image_count',
         `
@@ -114,7 +117,9 @@ export class GalleryService {
         JSON_AGG(
           JSON_BUILD_OBJECT(
             'id', lp.id,
-            'media_file_id', lp.media_file_id,
+            'mediaFileId', lp.media_file_id,
+            'on_sale', lp.on_sale,
+            'price', lp.price,
             'created_at', lp.created_at,
             'updated_at', lp.updated_at,
             'liked', (

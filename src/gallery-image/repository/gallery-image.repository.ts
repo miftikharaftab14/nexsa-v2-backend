@@ -36,6 +36,8 @@ export class GalleryImageRepository extends BaseRepository<GalleryImage> {
         'gi.media_file_id AS "mediaFileId"',
         'gi.user_id AS "userId"',
         'gi.created_at AS "createdAt"',
+        'gi.on_sale AS "on_sale"',
+        'gi.price AS "price"',
         'gi.updated_at AS "updatedAt"',
         'g.id AS "galleryId"',
         'CASE WHEN like.id IS NOT NULL THEN true ELSE false END AS "liked"',

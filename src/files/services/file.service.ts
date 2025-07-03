@@ -98,6 +98,7 @@ export class FileService {
 
   async getPresignedUrl(fileId: number, expiresIn?: number): Promise<string> {
     try {
+      if (!fileId) return '';
       const file = await this.fileRepository.findOneById(fileId);
       if (!file) {
         throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
@@ -190,11 +191,27 @@ export class FileService {
   }
 
   async getThumbnailPresignedUrl(fileId: number, expiresIn?: number): Promise<string> {
+    if (!fileId) return '';
     const file = await this.fileRepository.findOneById(fileId);
     if (!file) {
       throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
     }
-    if (file.thumbnailKey) return this.s3Service.getPresignedUrl(file.thumbnailKey, expiresIn);
-    else return '';
+    if (!file.thumbnailKey) {
+      return '';
+    }
+    const now = new Date();
+    if (
+      file.thumbnailSignedUrl &&
+      file.thumbnailSignedUrlExpireAt &&
+      file.thumbnailSignedUrlExpireAt > now
+    ) {
+      return file.thumbnailSignedUrl;
+    }
+    const url = await this.s3Service.getPresignedUrl(file.thumbnailKey, expiresIn);
+    const expireAt = new Date(now.getTime() + (expiresIn || 3600) * 1000);
+    file.thumbnailSignedUrl = url;
+    file.signedUrlExpireAt = expireAt;
+    await this.fileRepository.save(file);
+    return url;
   }
 }
