@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { BaseRepository } from 'src/common/repositories/base.repository';
 import { GalleryImage } from '../entities/gallery-image.entity';
 
@@ -54,6 +54,9 @@ export class GalleryImageRepository extends BaseRepository<GalleryImage> {
 
   async softDelete(id: number): Promise<void> {
     await this.repository.update(id, { is_deleted: true });
+  }
+  async softDeleteBulk(ids: number[]): Promise<void> {
+    await this.repository.update({ id: In(ids) }, { is_deleted: true });
   }
 
   async softDeleteByGalleryId(galleryId: number): Promise<void> {

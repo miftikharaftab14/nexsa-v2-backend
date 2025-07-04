@@ -99,17 +99,26 @@ export class FileService {
   async getPresignedUrl(fileId: number, expiresIn?: number): Promise<string> {
     try {
       if (!fileId) return '';
+
       const file = await this.fileRepository.findOneById(fileId);
       if (!file) {
         throw new BusinessException(LogMessages.FILE_NOT_FOUND, 'FILE_NOT_FOUND');
       }
       const now = new Date();
-      if (file.signedUrl && file.signedUrlExpireAt && file.signedUrlExpireAt > now) {
+      const tenMinutesFromNow = new Date(now.getTime() + 10 * 60 * 1000);
+
+      if (
+        file.signedUrl &&
+        file.signedUrlExpireAt &&
+        new Date(file.signedUrlExpireAt) > tenMinutesFromNow
+      ) {
         return file.signedUrl;
       }
+
       // Generate new signed URL
       const url = await this.s3Service.getPresignedUrl(file.key, expiresIn);
-      const expireAt = new Date(now.getTime() + (expiresIn || 3600) * 1000);
+      const expireAt = new Date(now.getTime() + (expiresIn || 3600) * 0.75 * 1000);
+
       file.signedUrl = url;
       file.signedUrlExpireAt = expireAt;
       await this.fileRepository.save(file);
@@ -200,15 +209,17 @@ export class FileService {
       return '';
     }
     const now = new Date();
+    const tenMinutesFromNow = new Date(now.getTime() + 10 * 60 * 1000);
+
     if (
       file.thumbnailSignedUrl &&
       file.thumbnailSignedUrlExpireAt &&
-      file.thumbnailSignedUrlExpireAt > now
+      file.thumbnailSignedUrlExpireAt > tenMinutesFromNow
     ) {
       return file.thumbnailSignedUrl;
     }
     const url = await this.s3Service.getPresignedUrl(file.thumbnailKey, expiresIn);
-    const expireAt = new Date(now.getTime() + (expiresIn || 3600) * 1000);
+    const expireAt = new Date(now.getTime() + (expiresIn || 3600) * 0.75 * 1000);
     file.thumbnailSignedUrl = url;
     file.signedUrlExpireAt = expireAt;
     await this.fileRepository.save(file);

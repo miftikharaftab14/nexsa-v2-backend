@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateGalleryDto {
@@ -11,7 +11,13 @@ export class UpdateGalleryDto {
   @IsString()
   name?: string;
 
+  @ApiProperty({
+    description: 'Notification enable in gallery',
+    example: false,
+    required: false,
+  })
   @IsOptional()
+  @IsBoolean()
   notificationsEnabled?: boolean;
 
   @ApiProperty({

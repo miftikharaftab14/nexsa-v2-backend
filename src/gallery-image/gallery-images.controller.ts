@@ -277,4 +277,30 @@ export class GalleryImagesController {
       data: result,
     };
   }
+  /**
+   * Delete multiple gallery-image by ID
+   */
+  @Post('bulk-delete')
+  @ApiOperation({ summary: 'Delete multiple gallery-images by IDs' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        ids: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'Array of GalleryImage IDs to delete',
+        },
+      },
+    },
+  })
+  async bulkDelete(@Body('ids') ids: number[]) {
+    const result = await this.galleryImagesService.removeMany(ids);
+    return {
+      success: true,
+      message: Messages.PRODUCT_DELETED,
+      status: HttpStatus.OK,
+      data: result,
+    };
+  }
 }

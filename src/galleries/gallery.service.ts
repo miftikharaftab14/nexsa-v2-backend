@@ -90,7 +90,6 @@ export class GalleryService {
     sellerId: number | bigint,
     userId: number | bigint,
   ): Promise<Gallery[] | null> {
-    console.log({ userId, sellerId });
     const user = await this.usersService.findOne(sellerId);
     if (!user) {
       throw new NotFoundException(`User with ID ${sellerId} not found`);
@@ -108,8 +107,8 @@ export class GalleryService {
       .createQueryBuilder('gallery')
       .select([
         'gallery.id AS id',
-        'gallery.notificationsEnabled AS notificationsEnabled',
-        'gallery.profileGalleryImageId AS profileGalleryImageId',
+        'gallery.notificationsEnabled AS "notificationsEnabled"',
+        'gallery.profileGalleryImageId AS "profileGalleryImageId"',
         'gallery.name AS name',
         'pc.total_gallery_image_count AS total_gallery_image_count',
         `
@@ -196,11 +195,21 @@ export class GalleryService {
       const uploadedFile = await this.fileService.uploadFile(image);
       gallery.profileGalleryImageId = uploadedFile.id;
     }
-    return this.galleriesRepository.save(gallery);
+    const savedGallery = await this.galleriesRepository.save(gallery);
+    const [singleGallery] = await this.convertGalleryImagesPresignedUrl([savedGallery]);
+    return singleGallery;
   }
 
   async remove(id: number): Promise<void> {
-    await this.galleryImageRepository.update({ galleryId: id }, { is_deleted: true });
+    await this.galleryImageRepository
+      .createQueryBuilder()
+      .update()
+      .set({ is_deleted: true })
+      .where('gallery_id = :id', { id })
+      .execute();
+
+    // Update the gallery itself
+    await this.galleriesRepository.update(id, { is_deleted: true });
     await this.galleriesRepository.update(id, { is_deleted: true });
   }
 }

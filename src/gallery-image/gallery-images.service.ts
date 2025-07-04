@@ -79,33 +79,34 @@ export class GalleryImagesService {
         mediaFileId: uploadedFile.id,
       });
       this.logger.log('GalleryImage created successfully', String(galleryImage.id));
-
       // Send push notification to all customers of the seller
-      try {
-        const contacts = await this.contactService.findBySellerId(sellerId);
-        const customerIds = (contacts.data || []).map(c => c.invited_user_id).filter(Boolean);
-        if (customerIds.length > 0) {
-          const tokensArr = await this.userDeviceTokenService.getTokensByUsers(customerIds);
-          const tokens = tokensArr.flat().filter(Boolean);
-          if (tokens.length > 0) {
-            await this.notificationService.sendPushNotification(
-              tokens,
-              'New GalleryImage Available!',
-              `A new gallery image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
-              {
-                galleryImageId: String(galleryImage.id),
-                galleryId: String(gallery.id),
-                type: 'galleryImage',
-                screen: 'CustomerGalleryImageDetail',
-              },
-            );
+      if (gallery.notificationsEnabled) {
+        try {
+          const contacts = await this.contactService.findBySellerId(sellerId);
+          const customerIds = (contacts.data || []).map(c => c.invited_user_id).filter(Boolean);
+          if (customerIds.length > 0) {
+            const tokensArr = await this.userDeviceTokenService.getTokensByUsers(customerIds);
+            const tokens = tokensArr.flat().filter(Boolean);
+            if (tokens.length > 0) {
+              await this.notificationService.sendPushNotification(
+                tokens,
+                'New GalleryImage Available!',
+                `A new gallery image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
+                {
+                  productId: String(galleryImage.id),
+                  galleryId: String(gallery.id),
+                  type: 'product',
+                  screen: 'CustomerProductDetail',
+                },
+              );
+            }
           }
+        } catch (notifyError) {
+          this.logger.error(
+            'Failed to send push notification after gallery image creation',
+            notifyError,
+          );
         }
-      } catch (notifyError) {
-        this.logger.error(
-          'Failed to send push notification after gallery image creation',
-          notifyError,
-        );
       }
       return galleryImage;
     } catch (error) {
@@ -193,7 +194,18 @@ export class GalleryImagesService {
       throw new InternalServerErrorException('Failed to remove gallery image');
     }
   }
+  async removeMany(ids: number[]): Promise<void> {
+    try {
+      this.logger.debug(`Attempting to remove gallery images: [${ids.join(', ')}]`);
 
+      await this.galleryImagesRepository.softDeleteBulk(ids);
+
+      this.logger.log(`Gallery images removed successfully: [${ids.join(', ')}]`);
+    } catch (error) {
+      this.logger.error('Failed to remove gallery images', error);
+      throw new InternalServerErrorException('Failed to remove gallery images');
+    }
+  }
   async uploadImage(galleryImageId: number, file: Express.Multer.File): Promise<GalleryImage> {
     try {
       this.logger.debug('Attempting to upload image for gallery image', String(galleryImageId));
