@@ -7,27 +7,19 @@ import {
   Param,
   Delete,
   ParseIntPipe,
-  UseInterceptors,
-  UploadedFiles,
   HttpStatus,
-  ParseFilePipe,
-  MaxFileSizeValidator,
-  FileTypeValidator,
   UseGuards,
 } from '@nestjs/common';
 import { GalleryImagesService } from './gallery-images.service';
-import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
-  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
-import { FileSize } from 'src/common/constants/file';
 import { Messages } from 'src/common/enums/messages.enum';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
@@ -55,9 +47,7 @@ export class GalleryImagesController {
    */
   @Post()
   @Roles(UserRole.SELLER)
-  @UseInterceptors(FilesInterceptor('image', 1)) // Accept only 1 image file
   @ApiOperation({ summary: 'Create gallery-image with a single image' })
-  @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
@@ -75,21 +65,9 @@ export class GalleryImagesController {
   async createGalleryImage(
     @Body() createGalleryImageDto: CreateGalleryImageDto,
     @CurrentUser() currentUser: CurrentUserType,
-    @UploadedFiles(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: FileSize.PRODUCT_IMAGE }),
-          new FileTypeValidator({ fileType: /(jpg|jpeg|png)$/ }),
-        ],
-        fileIsRequired: false,
-      }),
-    )
-    images: Express.Multer.File[],
   ) {
-    const image = images && images.length > 0 ? images[0] : undefined;
     const result = await this.galleryImagesService.createGalleryImage(
       createGalleryImageDto,
-      image,
       currentUser.userId,
     );
     return {

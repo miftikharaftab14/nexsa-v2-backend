@@ -6,10 +6,12 @@ import {
   ListObjectVersionsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LogContexts } from '../enums/logging.enum';
 import * as sharp from 'sharp';
+import { Messages } from '../enums/messages.enum';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class S3Service {
@@ -144,7 +146,83 @@ export class S3Service {
       throw error;
     }
   }
+  /**
+   * Generate presigned URLs for file uploads and downloads
+   */
+  async generatePresignedUrls(
+    files: Array<{ fileName: string; fileType: string }>,
+    folderPath: string,
+  ): Promise<
+    Array<{
+      fileName: string;
+      fileType: string;
+      index: number;
+      key: string;
+      presignedUrl: string;
+      getUrl: string;
+      cloudFrontUrl: string;
+    }>
+  > {
+    try {
+      if (!this.bucketName) {
+        throw new NotFoundException(Messages.AWS_S3_BUCKET_NAME_NOT_DEFINED);
+      }
 
+      // Ensure folder path ends with /
+      const normalizedFolderPath = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
+      const region: string = this.configService.get('AWS_REGION') || '';
+
+      const presignedUrls = await Promise.all(
+        files.map(async (file, index) => {
+          const uuid = uuidv4();
+          // Generate unique key for the file
+          const timestamp = Date.now();
+          const key = `${normalizedFolderPath}${timestamp}-${uuid}-${file.fileName}`;
+
+          // Generate presigned URL for upload (PUT)
+          const putCommand = new PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: key,
+            ContentType: file.fileType,
+          });
+
+          // Generate presigned URL for download (GET)
+          const getCommand = new GetObjectCommand({
+            Bucket: this.bucketName,
+            Key: key,
+          });
+
+          const [presignedUrl, getUrl] = await Promise.all([
+            getSignedUrl(this.s3Client, putCommand, { expiresIn: 60 * 60 }), // 1 hour
+            getSignedUrl(this.s3Client, getCommand, { expiresIn: 60 * 60 }), // 1 hour
+          ]);
+
+          // Generate CloudFront URL
+          const cloudFrontDomain = this.configService.get<string>('CLOUDFRONT_DOMAIN');
+          const cloudFrontUrl = cloudFrontDomain
+            ? `https://${cloudFrontDomain}/${key}`
+            : `https://${this.bucketName}.s3.${region}.amazonaws.com/${key}`;
+
+          return {
+            fileName: file.fileName,
+            fileType: file.fileType,
+            index: index + 1, // 1-based index
+            key,
+            presignedUrl,
+            getUrl,
+            cloudFrontUrl,
+          };
+        }),
+      );
+
+      this.logger.log(`Generated ${presignedUrls.length} presigned URLs for folder: ${folderPath}`);
+
+      return presignedUrls;
+    } catch (error) {
+      this.logger.error(`Error generating presigned URLs: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
   async uploadFileVersion(file: Express.Multer.File, key: string): Promise<string> {
     try {
       const command = new PutObjectCommand({

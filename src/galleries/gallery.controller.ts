@@ -9,27 +9,17 @@ import {
   ParseIntPipe,
   HttpStatus,
   UseGuards,
-  UseInterceptors,
-  UploadedFile,
 } from '@nestjs/common';
 import { GalleryService } from './gallery.service';
 import { CreateGalleryDto } from './dto/create-gallery.dto';
 import { UpdateGalleryDto } from './dto/update-gallery.dto';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiBearerAuth,
-  ApiConsumes,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { CurrentUserType } from '../common/types/current-user.interface';
-import { FileInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('galleries')
 @ApiBearerAuth()
@@ -103,8 +93,6 @@ export class GalleryController {
 
   @Patch(':id')
   @Roles(UserRole.SELLER)
-  @UseInterceptors(FileInterceptor('image'))
-  @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Update a gallery' })
   @ApiResponse({ status: 200, description: 'Gallery successfully updated' })
   @ApiResponse({ status: 400, description: 'Bad request' })
@@ -112,12 +100,8 @@ export class GalleryController {
   @ApiResponse({ status: 403, description: 'Forbidden - Seller access required' })
   @ApiResponse({ status: 404, description: 'Gallery not found' })
   @ApiParam({ name: 'id', type: 'number', description: 'Gallery ID' })
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateGalleryDto: UpdateGalleryDto,
-    @UploadedFile() image?: Express.Multer.File,
-  ) {
-    const gallery = await this.galleryService.update(id, updateGalleryDto, image);
+  async update(@Param('id', ParseIntPipe) id: number, @Body() updateGalleryDto: UpdateGalleryDto) {
+    const gallery = await this.galleryService.update(id, updateGalleryDto);
     return {
       success: true,
       message: 'Gallery updated',

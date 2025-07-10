@@ -8,6 +8,7 @@ import {
   UploadedFile,
   ParseIntPipe,
   Query,
+  Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FileService } from '../services/file.service';
@@ -110,5 +111,43 @@ export class FileController {
   @Get(':id')
   async getFile(@Param('id', ParseIntPipe) id: number): Promise<File> {
     return this.fileService.getFile(id);
+  }
+
+  @Post('presigned-urls')
+  @ApiOperation({ summary: 'Generate multiple presigned upload URLs for files' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              fileName: { type: 'string', example: 'image1.png' },
+              fileType: { type: 'string', example: 'image/png' },
+            },
+            required: ['fileName', 'fileType', 'uuid'],
+          },
+          description: 'Array of files to generate presigned URLs for',
+        },
+        folderPath: {
+          type: 'string',
+          example: 'uploads/user-uploads',
+          description: 'Folder path in the bucket where files will be uploaded',
+        },
+      },
+      required: ['files', 'folderPath'],
+    },
+  })
+  async generatePresignedUrls(
+    @Body()
+    body: {
+      files: Array<{ fileName: string; fileType: string }>;
+      folderPath: string;
+    },
+  ) {
+    const { files, folderPath } = body;
+    return this.fileService.generatePresignedUrls(files, folderPath);
   }
 }

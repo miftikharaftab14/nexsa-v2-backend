@@ -184,15 +184,11 @@ export class GalleryService {
     return singleGallery;
   }
 
-  async update(
-    id: number,
-    updateGalleryDto: UpdateGalleryDto,
-    image?: Express.Multer.File,
-  ): Promise<Gallery> {
+  async update(id: number, updateGalleryDto: UpdateGalleryDto): Promise<Gallery> {
     const gallery = await this.findOne(id);
     Object.assign(gallery, updateGalleryDto);
-    if (image) {
-      const uploadedFile = await this.fileService.uploadFile(image);
+    if (updateGalleryDto.image) {
+      const uploadedFile = await this.fileService.storeUploadedFile(updateGalleryDto.image);
       gallery.profileGalleryImageId = uploadedFile.id;
     }
     const savedGallery = await this.galleriesRepository.save(gallery);

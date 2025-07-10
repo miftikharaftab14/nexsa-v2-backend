@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { LogContexts, LogMessages } from '../../common/enums/logging.enum';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { FileSize } from 'src/common/constants/file';
+import { StoredFile } from '../types/storedFile';
 
 @Injectable()
 export class FileService {
@@ -56,6 +57,32 @@ export class FileService {
       );
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       throw new BusinessException(LogMessages.FILE_UPLOAD_FAILED, 'FILE_UPLOAD_FAILED', {
+        error: errorMessage,
+      });
+    }
+  }
+  async generatePresignedUrls(
+    files: Array<{ fileName: string; fileType: string }>,
+    folderPath: string,
+  ): Promise<
+    Array<{
+      fileName: string;
+      fileType: string;
+      index: number;
+      key: string;
+      presignedUrl: string;
+      getUrl: string;
+      cloudFrontUrl: string;
+    }>
+  > {
+    try {
+      return this.s3Service.generatePresignedUrls(files, folderPath);
+    } catch (error: unknown) {
+      this.logger.error(
+        `Failed to generate request for upload file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new BusinessException(LogMessages.FILE_REQUEST_FAILED, 'FILE_UPLOAD_FAILED', {
         error: errorMessage,
       });
     }
@@ -224,5 +251,8 @@ export class FileService {
     file.signedUrlExpireAt = expireAt;
     await this.fileRepository.save(file);
     return url;
+  }
+  async storeUploadedFile(file: StoredFile): Promise<File> {
+    return this.fileRepository.create(file);
   }
 }

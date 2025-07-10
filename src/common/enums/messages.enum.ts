@@ -98,4 +98,5 @@ export enum Messages {
   PRODUCTS_UNLIKED = 'GalleryImages unliked successfully',
   PRODUCTS_LIKES_FETCHED = 'GalleryImages likes fetched successfully',
   PRODUCTS_LIKE_FETCHED = 'GalleryImages like fetched successfully',
+  AWS_S3_BUCKET_NAME_NOT_DEFINED = 'Aws S3 Bucket Name Not Defined',
 }

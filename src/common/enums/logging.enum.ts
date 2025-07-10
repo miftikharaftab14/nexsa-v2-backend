@@ -111,6 +111,7 @@ export enum LogMessages {
   INVITATION_UPDATE_ATTEMPT = 'Attempting to update invitation with ID: %s',
 
   FILE_UPLOAD_FAILED = 'Failed to upload file',
+  FILE_REQUEST_FAILED = 'File to generate file upload request',
   FILE_NOT_FOUND = 'File not found',
   FILE_DELETE_FAILED = 'Failed to delete file',
 

@@ -53,9 +53,8 @@ export class GalleryImagesService {
 
   async createGalleryImage(
     dto: CreateGalleryImageDto,
-    image: Express.Multer.File | undefined,
     sellerId: number | bigint,
-  ): Promise<GalleryImage> {
+  ): Promise<GalleryImage[]> {
     try {
       this.logger.debug('Attempting to create gallery image', String(sellerId));
       const user = await this.userService.findOne(sellerId);
@@ -66,49 +65,58 @@ export class GalleryImagesService {
       const gallery: Gallery = await this.galleryService.findOne(dto.galleryId);
 
       // Only allow one image
-      if (!image) {
+      if (dto.image && dto.image?.length <= 0) {
         throw new InternalServerErrorException('At least one image is required');
       }
-      const file = image;
-      const uploadedFile = await this.fileService.uploadFile(file, 'gallery-images');
+      const galleryImages: GalleryImage[] = dto.image
+        ? await Promise.all(
+            dto.image?.map(async file => {
+              const uploadedFile = await this.fileService.storeUploadedFile(file);
+              // Create gallery image entity
+              const galleryImage = await this.galleryImagesRepository.create({
+                gallery,
+                userId: user.id,
+                mediaFileId: uploadedFile.id,
+              });
+              this.logger.log('GalleryImage created successfully', String(galleryImage.id));
+              // Send push notification to all customers of the seller
+              if (gallery.notificationsEnabled) {
+                try {
+                  const contacts = await this.contactService.findBySellerId(sellerId);
+                  const customerIds = (contacts.data || [])
+                    .map(c => c.invited_user_id)
+                    .filter(Boolean);
+                  if (customerIds.length > 0) {
+                    const tokensArr =
+                      await this.userDeviceTokenService.getTokensByUsers(customerIds);
+                    const tokens = tokensArr.flat().filter(Boolean);
+                    if (tokens.length > 0) {
+                      await this.notificationService.sendPushNotification(
+                        tokens,
+                        'New GalleryImage Available!',
+                        `A new gallery image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
+                        {
+                          productId: String(galleryImage.id),
+                          galleryId: String(gallery.id),
+                          type: 'product',
+                          screen: 'CustomerProductDetail',
+                        },
+                      );
+                    }
+                  }
+                } catch (notifyError) {
+                  this.logger.error(
+                    'Failed to send push notification after gallery image creation',
+                    notifyError,
+                  );
+                }
+              }
+              return galleryImage;
+            }),
+          )
+        : [];
 
-      // Create gallery image entity
-      const galleryImage = await this.galleryImagesRepository.create({
-        gallery,
-        userId: user.id,
-        mediaFileId: uploadedFile.id,
-      });
-      this.logger.log('GalleryImage created successfully', String(galleryImage.id));
-      // Send push notification to all customers of the seller
-      if (gallery.notificationsEnabled) {
-        try {
-          const contacts = await this.contactService.findBySellerId(sellerId);
-          const customerIds = (contacts.data || []).map(c => c.invited_user_id).filter(Boolean);
-          if (customerIds.length > 0) {
-            const tokensArr = await this.userDeviceTokenService.getTokensByUsers(customerIds);
-            const tokens = tokensArr.flat().filter(Boolean);
-            if (tokens.length > 0) {
-              await this.notificationService.sendPushNotification(
-                tokens,
-                'New GalleryImage Available!',
-                `A new gallery image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
-                {
-                  productId: String(galleryImage.id),
-                  galleryId: String(gallery.id),
-                  type: 'product',
-                  screen: 'CustomerProductDetail',
-                },
-              );
-            }
-          }
-        } catch (notifyError) {
-          this.logger.error(
-            'Failed to send push notification after gallery image creation',
-            notifyError,
-          );
-        }
-      }
-      return galleryImage;
+      return galleryImages;
     } catch (error) {
       this.logger.error('Failed to create gallery image', error);
       throw error instanceof UnauthorizedException

@@ -1,8 +1,7 @@
-import { IsNotEmpty, IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Descriptions } from 'src/common/enums/descriptions.enum';
 import { ApiProperty } from '@nestjs/swagger';
-import { Express } from 'express';
+import { StoredFile, StoredFileDto } from 'src/files/types/storedFile';
 
 export class CreateGalleryImageDto {
   @IsNotEmpty()
@@ -19,15 +18,10 @@ export class CreateGalleryImageDto {
   galleryId: number;
 
   @ApiProperty({
-    description: Descriptions.PRODUCT_IMAGES,
-    type: 'array',
-    items: {
-      type: 'string',
-      format: 'binary',
-    },
+    description: 'Profile image(s) for the gallery (file upload)',
+    type: [StoredFileDto],
     required: false,
   })
   @IsOptional()
-  @IsArray()
-  images?: Express.Multer.File[];
+  image?: StoredFile[];
 }
