@@ -7,6 +7,12 @@ export interface IS3Service {
   getPresignedUrl(key: string, expiresIn?: number): Promise<string>;
   getFileVersions(key: string): Promise<string[]>;
   uploadFileVersion(file: Express.Multer.File, key: string): Promise<string>;
+  uploadBuffer(
+    buffer: Buffer,
+    originalName: string,
+    mimetype: string,
+    folder?: string,
+  ): Promise<{ originalUrl: string; thumbnailUrl?: string }>;
   generatePresignedUrls(
     files: Array<{ fileName: string; fileType: string }>,
     folderPath: string,

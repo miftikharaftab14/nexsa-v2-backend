@@ -14,7 +14,10 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
-
+  app.enableCors({
+    origin: '*',
+    credentials: true, // if you're using cookies or Authorization headers
+  });
   // ✅ Allow large JSON and form payloads (100MB)
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));

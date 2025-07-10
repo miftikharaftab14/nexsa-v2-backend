@@ -14,6 +14,11 @@ export class CreateGalleryImageDto {
 
   @IsNotEmpty()
   @Type(() => Number)
+  @ApiProperty({
+    description: 'Profile image(s) for the gallery (file upload)',
+    example: 1,
+    required: true,
+  })
   @IsNumber()
   galleryId: number;
 

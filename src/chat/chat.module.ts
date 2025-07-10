@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
@@ -11,6 +11,7 @@ import { ContactsModule } from 'src/contacts/contacts.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
 import { Contact } from 'src/contacts/entities/contact.entity';
+import { FilesModule } from 'src/files/files.module';
 
 @Module({
   imports: [
@@ -19,6 +20,8 @@ import { Contact } from 'src/contacts/entities/contact.entity';
     ContactsModule,
     AuthModule,
     JwtModule.register({}),
+    FilesModule,
+    // No forwardRef needed here unless another module imports ChatModule
   ],
   providers: [ChatGateway, ChatService],
   controllers: [ChatController],

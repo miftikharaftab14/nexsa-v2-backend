@@ -48,19 +48,6 @@ export class GalleryImagesController {
   @Post()
   @Roles(UserRole.SELLER)
   @ApiOperation({ summary: 'Create gallery-image with a single image' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        galleryId: { type: 'number', example: 1 },
-        image: {
-          type: 'string',
-          format: 'binary',
-          description: 'Single gallery-image file',
-        },
-      },
-    },
-  })
   @ApiResponse({ status: 201, description: 'GalleryImage created successfully' })
   async createGalleryImage(
     @Body() createGalleryImageDto: CreateGalleryImageDto,

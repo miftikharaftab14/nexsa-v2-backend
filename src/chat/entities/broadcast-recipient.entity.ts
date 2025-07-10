@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryColumn, ManyToOne, JoinColumn, DeleteDateColumn } from 'typeorm';
 import { Broadcast } from './broadcast.entity';
 import { User } from '../../users/entities/user.entity';
 
@@ -13,6 +13,9 @@ export class BroadcastRecipient {
   @ManyToOne(() => Broadcast, broadcast => broadcast.recipients, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'broadcast_id' })
   broadcast: Broadcast;
+
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt?: Date;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'customer_id' })

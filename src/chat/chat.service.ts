@@ -1,12 +1,17 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, Logger, UnauthorizedException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, UpdateResult } from 'typeorm';
 import { Message, MessageType } from './entities/message.entity';
 import { User } from '../users/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
 import { UserService } from 'src/users/services/user.service';
 import { Broadcast } from './entities/broadcast.entity';
 import { BroadcastRecipient } from './entities/broadcast-recipient.entity';
+import { InjectionToken } from 'src/common/constants/injection-tokens';
+import { FileService } from 'src/files/services/file.service';
+import { ApiResponse } from 'src/common/interfaces/api-response.interface';
+import { File } from 'src/files/entities/file.entity';
+import { ChatGateway } from './chat.gateway';
 
 @Injectable()
 export class ChatService {
@@ -22,14 +27,28 @@ export class ChatService {
     @InjectRepository(Contact)
     private readonly contactRepository: Repository<Contact>,
     private readonly userService: UserService,
+    @Inject(InjectionToken.FILE_SERVICE)
+    private readonly fileService: FileService,
+    @Inject(forwardRef(() => ChatGateway))
+    private readonly chatGateway: ChatGateway,
   ) {}
-
+  async convertUrls(msgs: Message[]) {
+    return await Promise.all(
+      msgs.map(async msg => ({
+        ...msg,
+        mediaCont: {
+          mediaUrl: await this.fileService.getPresignedUrl(msg.mediaKey),
+          thumbnailUrl: await this.fileService.getThumbnailPresignedUrl(msg.mediaKey),
+        },
+      })),
+    );
+  }
   async createMessage(
     contact: Contact,
     sender: User,
     messageType: MessageType,
     content?: string,
-    mediaKey?: string,
+    mediaKey?: number,
   ): Promise<Message> {
     const newMessage = this.messageRepository.create({
       contact,
@@ -42,11 +61,12 @@ export class ChatService {
   }
 
   async getConversation(contactId: bigint): Promise<Message[]> {
-    return this.messageRepository.find({
+    const messages = await this.messageRepository.find({
       where: { contactId },
       relations: ['sender'],
       order: { createdAt: 'ASC' },
     });
+    return this.convertUrls(messages);
   }
 
   async createBroadcast({
@@ -61,7 +81,7 @@ export class ChatService {
     contactIds: number[];
     senderId: bigint;
     media: Express.Multer.File[];
-  }): Promise<any> {
+  }): Promise<ApiResponse<Broadcast>> {
     this.logger.log('broadcast is creating with user', String(senderId));
 
     // 1. Validate sender
@@ -85,31 +105,73 @@ export class ChatService {
       }),
     );
     await this.broadcastRecipientRepository.save(recipients);
+    let mediaUploaded: File[] = [];
+    if (media && media.length > 0) {
+      mediaUploaded = await Promise.all(
+        media.map(async file => await this.fileService.uploadFile(file, 'chat-media')),
+      );
+    }
 
     // 4. Send message to each contact (create Message entity)
-    const mediaKey = media && media.length > 0 ? media[0].filename : undefined;
     const sentMessages: Message[] = [];
+
     for (const contactId of contactIds) {
-      const msg = this.messageRepository.create({
-        contactId: BigInt(contactId),
-        senderId,
-        messageType: mediaKey ? MessageType.IMAGE : MessageType.TEXT,
-        content: message,
-        mediaKey,
-        broadcastId: savedBroadcast.id,
-      });
-      sentMessages.push(await this.messageRepository.save(msg));
+      const bigContactId = BigInt(contactId);
+      const messagesToSave: Message[] = [];
+
+      // 1. Add media messages (if any)
+      if (mediaUploaded.length > 0) {
+        messagesToSave.push(
+          ...mediaUploaded.map(obj =>
+            this.messageRepository.create({
+              contactId: bigContactId,
+              senderId,
+              messageType: MessageType.IMAGE,
+              mediaKey: obj.id,
+              broadcastId: savedBroadcast.id,
+            }),
+          ),
+        );
+      }
+
+      // 2. Add text message (if present)
+      if (message?.trim()) {
+        messagesToSave.push(
+          this.messageRepository.create({
+            contactId: bigContactId,
+            senderId,
+            messageType: MessageType.TEXT,
+            content: message,
+            broadcastId: savedBroadcast.id,
+          }),
+        );
+      }
+
+      // 3. Save all messages for this contact in parallel
+      const saved = await Promise.all(messagesToSave.map(msg => this.messageRepository.save(msg)));
+
+      // Emit each message to the recipient via socket
+      for (const savedMsg of saved) {
+        // Find the recipient userId for this contact
+        const contact = await this.contactRepository.findOne({ where: { id: bigContactId } });
+        if (!contact) continue;
+        const receiverId =
+          senderId === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+        await this.chatGateway.emitMessageToUser(receiverId, savedMsg);
+      }
+
+      sentMessages.push(...saved);
     }
 
     return {
       success: true,
-      broadcast: savedBroadcast,
-      recipients: contactIds,
-      messages: sentMessages,
+      message: 'broadcast created successfully',
+      status: 200,
+      data: savedBroadcast,
     };
   }
 
-  async getAllChatsForCurrentUser(userId: bigint, role: string): Promise<any[]> {
+  async getAllChatsForCurrentUser(userId: bigint): Promise<any[]> {
     // Find all contacts where the user is a participant
     const contacts = await this.contactRepository.find({
       where: [{ seller_id: userId }, { invited_user_id: userId }],
@@ -144,10 +206,35 @@ export class ChatService {
   }
 
   async deleteChat(contactId: bigint): Promise<void> {
-    // TODO: Implement logic to delete a chat
+    await this.messageRepository.softDelete({ contactId });
   }
 
-  async getBroadcastsBySeller(sellerId: bigint): Promise<Broadcast[]> {
-    return this.broadcastRepository.find({ where: { sellerId } });
+  async getBroadcastsBySeller(sellerId: bigint) {
+    const { raw, entities } = await this.broadcastRepository
+      .createQueryBuilder('broadcast')
+      .leftJoinAndSelect('broadcast.recipients', 'recipient')
+      .leftJoinAndSelect('recipient.customer', 'user')
+      .leftJoin(
+        'contacts',
+        'contact',
+        `(
+          (contact.invited_user_id = recipient.customerId AND contact.seller_id = broadcast.sellerId)
+          OR
+          (contact.seller_id = recipient.customerId AND contact.invited_user_id = broadcast.sellerId)
+        )`,
+      )
+      .addSelect([
+        'contact.id AS contact_id',
+        'recipient.customerId AS customer_id_debug',
+        'broadcast.sellerId AS seller_id_debug',
+      ])
+      .where('broadcast.sellerId = :sellerId', { sellerId })
+      .getRawAndEntities();
+    console.log({ raw });
+
+    return entities;
+  }
+  async deleteBroadcastsBySeller(id: number): Promise<UpdateResult> {
+    return this.broadcastRepository.softDelete({ id });
   }
 }

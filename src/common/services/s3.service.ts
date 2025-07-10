@@ -240,4 +240,88 @@ export class S3Service {
       throw error;
     }
   }
+
+  // async uploadBuffer(
+  //   buffer: Buffer,
+  //   originalName: string,
+  //   mimetype: string,
+  //   folder: string = 'uploads',
+  // ): Promise<string> {
+  //   try {
+  //     const key = `${folder}/${Date.now()}-${originalName}`;
+  //     await this.s3Client.send(
+  //       new PutObjectCommand({
+  //         Bucket: this.bucketName,
+  //         Key: key,
+  //         Body: buffer,
+  //         ContentType: mimetype,
+  //       }),
+  //     );
+  //     return key;
+  //   } catch (error) {
+  //     this.logger.error(
+  //       `Failed to upload buffer to S3: ${error instanceof Error ? error.message : 'Unknown error'}`,
+  //     );
+  //     throw error;
+  //   }
+  // }
+  async uploadBuffer(
+    buffer: Buffer,
+    originalName: string,
+    mimetype: string,
+    folder: string = 'uploads',
+  ): Promise<{ originalUrl: string; thumbnailUrl?: string }> {
+    try {
+      const key = `${folder}/${Date.now()}-${originalName}`;
+      const contentType = mimetype;
+
+      // Upload original file
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: buffer,
+          ContentType: contentType,
+        }),
+      );
+
+      const region: string = this.configService.get('AWS_REGION') || '';
+      const originalUrl = `https://${this.bucketName}.s3.${region}.amazonaws.com/${key}`;
+
+      let thumbnailUrl: string | undefined = undefined;
+
+      // If it's an image, generate and upload a thumbnail
+      if (contentType.startsWith('image/')) {
+        const thumbBuffer = await sharp(buffer)
+          .resize(200, 200, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .toBuffer();
+
+        const thumbKey = `${folder}/thumbnails/${Date.now()}-thumb-${originalName}`;
+
+        await this.s3Client.send(
+          new PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: thumbKey,
+            Body: thumbBuffer,
+            ContentType: contentType,
+          }),
+        );
+
+        thumbnailUrl = `https://${this.bucketName}.s3.${region}.amazonaws.com/${thumbKey}`;
+      }
+
+      return {
+        originalUrl,
+        thumbnailUrl,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to upload file to S3: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw error;
+    }
+  }
 }

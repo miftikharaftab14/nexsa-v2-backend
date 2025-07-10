@@ -252,7 +252,53 @@ export class FileService {
     await this.fileRepository.save(file);
     return url;
   }
+
+  async uploadBufferAsFile(
+    buffer: Buffer,
+    originalName: string,
+    mimetype: string,
+    size: number,
+    folder?: string,
+  ): Promise<File> {
+    try {
+      const { originalUrl: url, thumbnailUrl } = await this.s3Service.uploadBuffer(
+        buffer,
+        originalName,
+        mimetype,
+        folder || this.s3Folder,
+      );
+
+      const key = url.split('.com/')[1];
+      const thumbnailKey = (thumbnailUrl?.split('.com/') || [])[1];
+      const fileData = {
+        key,
+        url,
+        originalName,
+        mimeType: mimetype,
+        size: size as FileSize.PROFILE_IMAGE_SIZE,
+        folder: folder || this.s3Folder,
+        thumbnailKey,
+        // versionId,
+        // version: versions.length,
+      };
+      return this.fileRepository.create(fileData);
+    } catch (error: unknown) {
+      this.logger.error(
+        `Failed to upload buffer as file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new BusinessException(LogMessages.FILE_UPLOAD_FAILED, 'FILE_UPLOAD_FAILED', {
+        error: errorMessage,
+      });
+    }
+  }
   async storeUploadedFile(file: StoredFile): Promise<File> {
-    return this.fileRepository.create(file);
+    const region = this.configService.get<string>('AWS_REGION');
+
+    const bucketName = this.configService.get<string>('AWS_S3_BUCKET_NAME');
+
+    const url = `https://${bucketName}.s3.${region}.amazonaws.com/${file.key}`;
+
+    return this.fileRepository.create({ ...file, url });
   }
 }

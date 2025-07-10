@@ -98,5 +98,13 @@ export enum Messages {
   PRODUCTS_UNLIKED = 'GalleryImages unliked successfully',
   PRODUCTS_LIKES_FETCHED = 'GalleryImages likes fetched successfully',
   PRODUCTS_LIKE_FETCHED = 'GalleryImages like fetched successfully',
+
+  BRODCAST_DELETED = 'Brodcast deleted successfully',
+  BRODCAST_FETCHED = 'Brodcast fetched successfully',
+  BRODCAST_CREATED = 'Brodcast created successfully',
+  CHAT_DELETED = 'Chat deleted successfully',
+  CHAT_FETCHED = 'Chat fetched successfully',
+  CHATS_FETCHED = 'Chats fetched successfully',
   AWS_S3_BUCKET_NAME_NOT_DEFINED = 'Aws S3 Bucket Name Not Defined',
+  PRESIGNED_URL_GENERATED = 'PreSigned url generated',
 }

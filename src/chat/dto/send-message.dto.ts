@@ -17,5 +17,5 @@ export class SendMessageDto {
 
   @IsString()
   @IsOptional()
-  mediaKey?: string;
+  image?: string;
 }

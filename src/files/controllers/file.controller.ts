@@ -9,11 +9,13 @@ import {
   ParseIntPipe,
   Query,
   Body,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FileService } from '../services/file.service';
 import { File } from '../entities/file.entity';
 import { ApiTags, ApiConsumes, ApiBody, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Messages } from 'src/common/enums/messages.enum';
 
 @ApiTags('Files')
 @Controller('files')
@@ -148,6 +150,12 @@ export class FileController {
     },
   ) {
     const { files, folderPath } = body;
-    return this.fileService.generatePresignedUrls(files, folderPath);
+    const result = await this.fileService.generatePresignedUrls(files, folderPath);
+    return {
+      success: true,
+      message: Messages.PRESIGNED_URL_GENERATED,
+      status: HttpStatus.OK,
+      data: result,
+    };
   }
 }

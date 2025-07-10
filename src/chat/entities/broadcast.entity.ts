@@ -7,6 +7,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  DeleteDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { BroadcastRecipient } from './broadcast-recipient.entity';
@@ -31,6 +32,9 @@ export class Broadcast {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt?: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;

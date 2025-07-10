@@ -6,6 +6,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  DeleteDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Contact } from '../../contacts/entities/contact.entity';
@@ -48,8 +49,8 @@ export class Message {
   @Column({ type: 'text', nullable: true })
   content: string;
 
-  @Column({ name: 'media_key', type: 'text', nullable: true })
-  mediaKey: string;
+  @Column({ name: 'media_key', type: 'bigint', nullable: true })
+  mediaKey: number;
 
   @Column({ name: 'broadcast_id', type: 'int', nullable: true })
   broadcastId?: number;
@@ -63,6 +64,9 @@ export class Message {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt?: Date;
 
   @Column({ default: false })
   read: boolean;
