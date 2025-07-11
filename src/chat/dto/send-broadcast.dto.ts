@@ -17,5 +17,5 @@ export class SendBroadcastDto {
 
   @IsString()
   @IsOptional()
-  mediaKey?: string;
+  image?: string;
 }

@@ -96,12 +96,14 @@ export class ChatService {
       sellerId: senderId,
     });
     const savedBroadcast = await this.broadcastRepository.save(broadcast);
-
     // 3. Create recipients
-    const recipients = contactIds.map(contactId =>
-      this.broadcastRecipientRepository.create({
-        broadcastId: savedBroadcast.id,
-        customerId: BigInt(contactId),
+    const recipients = await Promise.all(
+      contactIds.map(async contactId => {
+        const contact = await this.contactRepository.findOne({ where: { id: BigInt(contactId) } });
+        return this.broadcastRecipientRepository.create({
+          broadcastId: savedBroadcast.id,
+          customerId: contact?.invited_user_id,
+        });
       }),
     );
     await this.broadcastRecipientRepository.save(recipients);
@@ -236,5 +238,31 @@ export class ChatService {
   }
   async deleteBroadcastsBySeller(id: number): Promise<UpdateResult> {
     return this.broadcastRepository.softDelete({ id });
+  }
+  async getBroadcastContactIds(broadcastId: number): Promise<number[]> {
+    // Get the broadcast to know the sellerId
+    const broadcast = await this.broadcastRepository.findOne({ where: { id: broadcastId } });
+    if (!broadcast) return [];
+
+    // Find all contacts that match the recipient users for this broadcast
+    const contacts: { contact_id: bigint }[] = await this.contactRepository
+      .createQueryBuilder('contact')
+      .innerJoin(
+        'broadcast_recipients',
+        'recipient',
+        `
+          recipient.broadcast_id = :broadcastId AND (
+            (contact.seller_id = :sellerId AND contact.invited_user_id = recipient.customer_id)
+            OR
+            (contact.invited_user_id = :sellerId AND contact.seller_id = recipient.customer_id)
+          )
+        `,
+        { broadcastId, sellerId: broadcast.sellerId.toString() },
+      )
+      .select('contact.id', 'contact_id')
+      .getRawMany();
+    console.log({ contacts });
+
+    return contacts.map(r => Number(r.contact_id));
   }
 }
