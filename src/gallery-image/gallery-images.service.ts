@@ -36,14 +36,17 @@ export class GalleryImagesService {
   async convertGalleryImagePresignedUrl(galleryImage: GalleryImage) {
     try {
       this.logger.debug('Attempting to convert gallery image presigned URL');
+      let is_video = false;
+      if (galleryImage.mediaFileId) {
+        const file = await this.fileService.getFile(galleryImage.mediaFileId);
+        is_video = file?.mimeType?.startsWith('video/');
+      }
       return {
         ...galleryImage,
-        thumbnail: galleryImage.mediaFileId
-          ? await this.fileService.getThumbnailPresignedUrl(galleryImage.mediaFileId, 3600)
-          : '',
         mediaUrl: galleryImage.mediaFileId
           ? await this.fileService.getPresignedUrl(galleryImage.mediaFileId, 3600)
           : '',
+        is_video,
       };
     } catch (error) {
       this.logger.error('Failed to convert gallery image presigned URL', error);

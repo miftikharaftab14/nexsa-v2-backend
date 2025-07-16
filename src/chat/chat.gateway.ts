@@ -30,6 +30,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { AuthenticatedSocket } from './type/socket-client';
+import { MarkReadChatDto } from './dto/mark-read-chat.dto';
 
 @WebSocketGateway({
   namespace: '/ws/chat',
@@ -169,25 +170,9 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         (data.messageType === MessageType.IMAGE || data.messageType === MessageType.FILE) &&
         data.image
       ) {
-        let base64 = data.image;
-        const matches = base64.match(/^data:(.+);base64,(.+)$/);
-        if (matches) base64 = matches[2];
-
-        const buffer = Buffer.from(base64, 'base64');
-        const originalname = data.messageType === MessageType.IMAGE ? 'upload.png' : 'upload.bin';
-        const mimetype =
-          data.messageType === MessageType.IMAGE ? 'image/png' : 'application/octet-stream';
-
-        const uploaded = await this.fileService.uploadBufferAsFile(
-          buffer,
-          originalname,
-          mimetype,
-          buffer.length,
-          'chat-media',
-        );
-        mediaKey = uploaded.id;
+        const uploadedFile = await this.fileService.storeUploadedFile(data.image);
+        mediaKey = uploadedFile.id;
         mediaCont.mediaUrl = await this.fileService.getPresignedUrl(mediaKey);
-        mediaCont.thumbnailUrl = await this.fileService.getThumbnailPresignedUrl(mediaKey);
         delete data.image;
       }
 
@@ -201,14 +186,16 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
       const receiverId =
         user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+      this.logger.log({ receiverId });
 
       const receiverSocketId = await this.redis.get(
         `${this.redisPrefix}:user_socket:${receiverId}`,
       );
+      this.logger.log({ receiverSocketId });
       if (receiverSocketId) {
         this.server.to(receiverSocketId).emit('receive_message', { ...message, mediaCont });
       }
-
+      this.logger.log(`${this.redisPrefix}:user_socket:${user.id}`);
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
       if (senderSocketId && senderSocketId !== receiverSocketId) {
         this.server.to(senderSocketId).emit('send_message', { ...message, mediaCont });
@@ -260,7 +247,6 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         delete data.image;
       }
       const broadcastRecivers = await this.chatService.getBroadcastContactIds(data.broadcastId);
-      console.log({ broadcastRecivers });
       await Promise.all(
         broadcastRecivers.map(async contentId => {
           const { data: contact } = await this.contactService.findOne(contentId);
@@ -292,6 +278,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
       client.emit('error_message', { message });
     }
+  }
+  // this is for mark messages ready for a chat
+  @SubscribeMessage('mark_read')
+  handleMarkRead(
+    @MessageBody() data: MarkReadChatDto,
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    this.logger.log(data, client);
   }
 
   public async emitMessageToUser(userId: number | bigint, message: any) {

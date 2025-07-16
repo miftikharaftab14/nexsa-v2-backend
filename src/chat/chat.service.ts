@@ -80,6 +80,7 @@ export class ChatService {
     message: string;
     contactIds: number[];
     senderId: bigint;
+
     media: Express.Multer.File[];
   }): Promise<ApiResponse<Broadcast>> {
     this.logger.log('broadcast is creating with user', String(senderId));
@@ -212,7 +213,7 @@ export class ChatService {
   }
 
   async getBroadcastsBySeller(sellerId: bigint) {
-    const { raw, entities } = await this.broadcastRepository
+    const { entities } = await this.broadcastRepository
       .createQueryBuilder('broadcast')
       .leftJoinAndSelect('broadcast.recipients', 'recipient')
       .leftJoinAndSelect('recipient.customer', 'user')
@@ -232,7 +233,6 @@ export class ChatService {
       ])
       .where('broadcast.sellerId = :sellerId', { sellerId })
       .getRawAndEntities();
-    console.log({ raw });
 
     return entities;
   }
@@ -261,7 +261,6 @@ export class ChatService {
       )
       .select('contact.id', 'contact_id')
       .getRawMany();
-    console.log({ contacts });
 
     return contacts.map(r => Number(r.contact_id));
   }

@@ -33,23 +33,24 @@ export class GalleryService {
       galleries.map(async gallery => {
         return {
           ...gallery,
-          profileThumbnail: await this.fileService.getThumbnailPresignedUrl(
-            gallery.profileGalleryImageId,
-            3600,
-          ),
+
           profileGallery: await this.fileService.getPresignedUrl(
             gallery.profileGalleryImageId,
             3600,
           ),
           galleryImages: await Promise.all(
-            (gallery.galleryImages || gallery['gallery_images'] || []).map(async galleries => ({
-              ...galleries,
-              mediaUrl: await this.fileService.getPresignedUrl(galleries['mediaFileId'], 3600),
-              thumbnail: await this.fileService.getThumbnailPresignedUrl(
-                galleries['mediaFileId'],
-                3600,
-              ),
-            })),
+            (gallery.galleryImages || gallery['gallery_images'] || []).map(async galleries => {
+              let is_video = false;
+              if (galleries['mediaFileId']) {
+                const file = await this.fileService.getFile(galleries['mediaFileId']);
+                is_video = file?.mimeType?.startsWith('video/');
+              }
+              return {
+                ...galleries,
+                mediaUrl: await this.fileService.getPresignedUrl(galleries['mediaFileId'], 3600),
+                is_video,
+              };
+            }),
           ),
         };
       }),
@@ -107,6 +108,7 @@ export class GalleryService {
       .createQueryBuilder('gallery')
       .select([
         'gallery.id AS id',
+        'gallery.description AS description',
         'gallery.notificationsEnabled AS "notificationsEnabled"',
         'gallery.profileGalleryImageId AS "profileGalleryImageId"',
         'gallery.name AS name',
@@ -185,6 +187,8 @@ export class GalleryService {
   }
 
   async update(id: number, updateGalleryDto: UpdateGalleryDto): Promise<Gallery> {
+    console.log({ updateGalleryDto });
+
     const gallery = await this.findOne(id);
     Object.assign(gallery, updateGalleryDto);
     if (updateGalleryDto.image) {

@@ -13,6 +13,15 @@ export class UpdateGalleryDto {
   name?: string;
 
   @ApiProperty({
+    description: 'Description of the gallery',
+    example: 'A collection of modern art pieces',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiProperty({
     description: 'Notification enable in gallery',
     example: false,
     required: false,

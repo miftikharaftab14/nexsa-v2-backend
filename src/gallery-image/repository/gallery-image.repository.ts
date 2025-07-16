@@ -42,6 +42,7 @@ export class GalleryImageRepository extends BaseRepository<GalleryImage> {
         'g.id AS "galleryId"',
         'CASE WHEN like.id IS NOT NULL THEN true ELSE false END AS "liked"',
       ])
+      .orderBy('gi.created_at', 'DESC')
       .getRawMany();
   }
 
