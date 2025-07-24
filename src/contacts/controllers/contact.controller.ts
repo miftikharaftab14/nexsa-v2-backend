@@ -74,6 +74,13 @@ export class ContactController {
   async findAllSelelrsByCustomer(@CurrentUser() user: CurrentUserType) {
     return this.contactService.findAllSelelrsByCustomer(user.userId);
   }
+  @Get('accepted-with-preferences')
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Get all accepted customer invited by the logged-in sellers' })
+  @ApiResponse(_200_contacts)
+  async findAcceptedContactsWithPreferences(@CurrentUser() user: CurrentUserType) {
+    return this.contactService.findContactsBySeller(user.userId);
+  }
 
   @Get(':id')
   @ApiOperation({ summary: Descriptions.GET_CONTACT_BY_ID_SUMMARY })

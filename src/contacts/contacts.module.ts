@@ -6,9 +6,10 @@ import { ContactRepository } from './repositories/contact.repository';
 import { Contact } from './entities/contact.entity';
 import { InvitationsModule } from 'src/invitations/invitations.module';
 import { FilesModule } from 'src/files/files.module';
+import { Preference } from 'src/common/entities/preference.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Contact]), InvitationsModule, FilesModule],
+  imports: [TypeOrmModule.forFeature([Contact, Preference]), InvitationsModule, FilesModule],
   controllers: [ContactController],
   providers: [ContactService, ContactRepository],
   exports: [ContactService, ContactRepository],

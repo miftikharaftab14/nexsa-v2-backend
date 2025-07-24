@@ -1,15 +1,19 @@
 // src/contacts/repositories/contact.repository.ts
 import { Injectable } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Contact } from '../entities/contact.entity';
 import { BaseRepository } from '../../common/repositories/base.repository';
 import { ContactStatus } from 'src/common/enums/contact-status.enum';
 import { SellerInfoType } from '../types/sellers-info-interface';
+import { Preference } from 'src/common/entities/preference.entity';
 
 @Injectable()
 export class ContactRepository extends BaseRepository<Contact> {
-  constructor(@InjectDataSource() dataSource: DataSource) {
+  constructor(
+    @InjectDataSource() dataSource: DataSource,
+    @InjectRepository(Preference) private readonly preferenceRepo: Repository<Preference>, // Inject Preference repo
+  ) {
     super(Contact, dataSource);
   }
   async create(data: Partial<Contact>): Promise<Contact> {
@@ -94,5 +98,35 @@ export class ContactRepository extends BaseRepository<Contact> {
       relations: ['seller'],
       order: { created_at: 'DESC' },
     });
+  }
+  async findContactsBySeller(sellerId: bigint) {
+    // Fetch contacts with invited user
+    const contacts = await this.repository
+      .createQueryBuilder('contact')
+      .leftJoinAndSelect('contact.invited_user', 'invited_user')
+      .where('contact.seller_id = :sellerId', { sellerId })
+      .andWhere('contact.status = :status', { status: ContactStatus.ACCEPTED })
+      .getMany();
+
+    // Collect all unique preference IDs from invited users
+    const allPrefIds = [...new Set(contacts.flatMap(c => c.invited_user?.preferences || []))];
+
+    if (allPrefIds.length === 0) {
+      return contacts; // No preferences to fetch
+    }
+
+    // Fetch preference records (id + name)
+    const preferences = await this.preferenceRepo.findByIds(allPrefIds);
+
+    // Replace preference IDs with names
+    contacts.forEach(contact => {
+      const matchedNames = preferences
+        .filter(pref => (contact.invited_user.preferences || []).includes(String(pref.id)))
+        .map(pref => pref.name);
+
+      contact.invited_user.preferences = matchedNames;
+    });
+
+    return contacts;
   }
 }

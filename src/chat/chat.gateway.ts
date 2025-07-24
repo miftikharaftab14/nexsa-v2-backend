@@ -198,6 +198,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       this.logger.log(`${this.redisPrefix}:user_socket:${user.id}`);
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
       if (senderSocketId && senderSocketId !== receiverSocketId) {
+        this.logger.log(`send: ${this.redisPrefix}:user_socket:${user.id}`);
         this.server.to(senderSocketId).emit('send_message', { ...message, mediaCont });
       }
     } catch (error: unknown) {
@@ -256,6 +257,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             data.messageType,
             data.content,
             undefined,
+            data.broadcastId,
           );
 
           const receiverId =
@@ -270,10 +272,16 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         }),
       );
 
-      // const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
-      // if (senderSocketId) {
-      //   this.server.to(senderSocketId).emit('receive_message', { ...message, mediaCont });
-      // }
+      const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
+      if (senderSocketId) {
+        this.server.to(senderSocketId).emit('receive_message', {
+          broadcastId: data.broadcastId,
+          messageType: data.messageType,
+          content: data.content,
+          mediaCont,
+          senderId: sender.id,
+        });
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
       client.emit('error_message', { message });

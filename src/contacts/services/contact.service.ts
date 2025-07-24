@@ -297,4 +297,7 @@ export class ContactService implements IContactUpdate {
       });
     }
   }
+  async findContactsBySeller(sellerId: bigint) {
+    return await this.contactRepo.findContactsBySeller(sellerId);
+  }
 }

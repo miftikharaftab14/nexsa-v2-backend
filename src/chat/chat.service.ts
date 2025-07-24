@@ -49,6 +49,7 @@ export class ChatService {
     messageType: MessageType,
     content?: string,
     mediaKey?: number,
+    broadcastId?: number,
   ): Promise<Message> {
     const newMessage = this.messageRepository.create({
       contact,
@@ -56,6 +57,7 @@ export class ChatService {
       messageType,
       content,
       mediaKey,
+      broadcastId,
     });
     return this.messageRepository.save(newMessage);
   }
@@ -235,6 +237,40 @@ export class ChatService {
       .getRawAndEntities();
 
     return entities;
+  }
+  async getBroadcastsById(broadcastId: number) {
+    // Fetch the broadcast with recipients and their user info
+    const broadcast = await this.broadcastRepository.findOne({
+      where: { id: broadcastId },
+      relations: ['recipients', 'recipients.customer', 'seller'],
+    });
+    if (!broadcast || !broadcast.recipients?.length) {
+      return { broadcast, messages: [] };
+    }
+
+    // Pick the first recipient
+    const recipient = broadcast.recipients[0];
+
+    // Find the contact between seller and this recipient
+    const contact = await this.contactRepository.findOne({
+      where: [
+        { seller_id: broadcast.sellerId, invited_user_id: recipient.customerId },
+        { seller_id: recipient.customerId, invited_user_id: broadcast.sellerId },
+      ],
+    });
+    if (!contact) {
+      return { broadcast, messages: [] };
+    }
+
+    // Fetch all messages for this contact and this broadcast
+    let messages = await this.messageRepository.find({
+      where: { contactId: contact.id, broadcastId },
+      relations: ['sender'],
+      order: { createdAt: 'ASC' },
+    });
+    messages = await this.convertUrls(messages);
+
+    return { broadcast, messages };
   }
   async deleteBroadcastsBySeller(id: number): Promise<UpdateResult> {
     return this.broadcastRepository.softDelete({ id });

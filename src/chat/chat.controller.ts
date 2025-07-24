@@ -142,10 +142,23 @@ export class ChatController {
       data: result,
     };
   }
+  @Get('broadcast/:brodcastId')
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Get a broadcasts' })
+  @ApiResponse({ status: 200, description: 'List of broadcasts' })
+  async getBroadcastsById(@Param('brodcastId') brodcastId: number) {
+    const result = await this.chatService.getBroadcastsById(brodcastId);
+    return {
+      success: true,
+      message: Messages.BRODCAST_FETCHED,
+      status: HttpStatus.OK,
+      data: result,
+    };
+  }
   @Delete('broadcast/:brodcastId')
   @Roles(UserRole.SELLER)
   @ApiOperation({ summary: 'delete a broadcasts' })
-  @ApiResponse({ status: 200, description: 'List of broadcasts' })
+  @ApiResponse({ status: 200, description: 'Broadcasts deleted successfully' })
   async deleteBroadcastsBySeller(@Param('brodcastId') brodcastId: number) {
     const result = await this.chatService.deleteBroadcastsBySeller(brodcastId);
     return {
