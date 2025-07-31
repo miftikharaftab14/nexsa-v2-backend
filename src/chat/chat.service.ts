@@ -185,7 +185,9 @@ export class ChatService {
     });
 
     // For each contact, check if there are messages and count unread
-    const result: User | { unreadMessagesCount: number; contactId: bigint }[] = [];
+    const result:
+      | User
+      | { unreadMessagesCount: number; contactId: bigint; profile_picture: string }[] = [];
     for (const contact of contacts) {
       // Only include chats with at least one message
       const messageCount = await this.messageRepository.count({ where: { contactId: contact.id } });
@@ -203,6 +205,12 @@ export class ChatService {
 
       result.push({
         ...contact.invited_user,
+        profile_picture: contact.invited_user.profile_picture
+          ? await this.fileService.getPresignedUrl(
+              Number(contact.invited_user.profile_picture),
+              3600,
+            )
+          : '',
         contactId: contact.id,
         unreadMessagesCount,
       });
