@@ -99,20 +99,28 @@ export class ContactRepository extends BaseRepository<Contact> {
       order: { created_at: 'DESC' },
     });
   }
+
   async findContactsBySeller(sellerId: bigint) {
-    // Fetch contacts with invited user
+    // Fetch contacts with invited user (including profile_picture)
     const contacts = await this.repository
       .createQueryBuilder('contact')
       .leftJoinAndSelect('contact.invited_user', 'invited_user')
       .where('contact.seller_id = :sellerId', { sellerId })
       .andWhere('contact.status = :status', { status: ContactStatus.ACCEPTED })
+      .select([
+        'contact',
+        'invited_user.id',
+        'invited_user.username', // add any other fields you need
+        'invited_user.profile_picture',
+        'invited_user.preferences',
+      ])
       .getMany();
 
     // Collect all unique preference IDs from invited users
     const allPrefIds = [...new Set(contacts.flatMap(c => c.invited_user?.preferences || []))];
 
     if (allPrefIds.length === 0) {
-      return contacts; // No preferences to fetch
+      return contacts;
     }
 
     // Fetch preference records (id + name)

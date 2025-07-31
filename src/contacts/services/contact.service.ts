@@ -1,5 +1,5 @@
 // src/contacts/services/contact.service.ts
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ContactRepository } from '../repositories/contact.repository';
 import { CreateContactDto } from '../dto/create-contact.dto';
 import { UpdateContactDto } from '../dto/update-contact.dto';
@@ -30,7 +30,24 @@ export class ContactService implements IContactUpdate {
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
   ) {}
+  async convertUserImagePresignedUrl(contextData: Contact) {
+    try {
+      this.logger.debug('Attempting to convert contacts image presigned URL');
 
+      return {
+        ...contextData,
+        profile_picture: contextData.invited_user?.profile_picture
+          ? await this.fileService.getPresignedUrl(
+              Number(contextData.invited_user.profile_picture),
+              3600,
+            )
+          : '',
+      };
+    } catch (error) {
+      this.logger.error('Failed to convert gallery image presigned URL', error);
+      throw new InternalServerErrorException('Failed to convert gallery image presigned URL');
+    }
+  }
   async create(createContactDto: CreateContactDto): Promise<ApiResponse<Contact>> {
     try {
       this.logger.debug(LogMessages.CONTACT_CREATE_ATTEMPT);
@@ -298,6 +315,7 @@ export class ContactService implements IContactUpdate {
     }
   }
   async findContactsBySeller(sellerId: bigint) {
-    return await this.contactRepo.findContactsBySeller(sellerId);
+    const result = await this.contactRepo.findContactsBySeller(sellerId);
+    return Promise.all(result.map(context => this.convertUserImagePresignedUrl(context)));
   }
 }
