@@ -177,44 +177,59 @@ export class ChatService {
   }
 
   async getAllChatsForCurrentUser(userId: bigint): Promise<any[]> {
-    // Find all contacts where the user is a participant
     const contacts = await this.contactRepository.find({
       where: [{ seller_id: userId }, { invited_user_id: userId }],
       relations: ['invited_user'],
       order: { updated_at: 'DESC' },
     });
 
-    // For each contact, check if there are messages and count unread
-    const result:
-      | User
-      | { unreadMessagesCount: number; contactId: bigint; profile_picture: string }[] = [];
+    const result: {
+      unreadMessagesCount: number;
+      contactId: bigint;
+      profile_picture: string;
+      username: string;
+      phone_number: string;
+      lastMessage: string | null;
+      lastMessageAt: Date | null;
+      read: boolean;
+    }[] = [];
+
     for (const contact of contacts) {
-      // Only include chats with at least one message
-      const messageCount = await this.messageRepository.count({ where: { contactId: contact.id } });
+      const messageCount = await this.messageRepository.count({
+        where: { contactId: contact.id },
+      });
       if (messageCount === 0) continue;
 
-      // Count unread messages for this user (assuming Message has 'read' and 'senderId')
       const unreadMessagesCount = await this.messageRepository.count({
         where: {
           contactId: contact.id,
           read: false,
-          // Unread for the user: not sent by the user
           senderId: contact.seller_id === userId ? contact.invited_user_id : contact.seller_id,
         },
       });
 
+      // Fetch the last message
+      const lastMessage = await this.messageRepository.findOne({
+        where: { contactId: contact.id },
+        order: { createdAt: 'DESC' },
+      });
+      const { full_name } = contact;
+      const { profile_picture, phone_number } = contact.invited_user;
+
       result.push({
-        ...contact.invited_user,
-        profile_picture: contact.invited_user.profile_picture
-          ? await this.fileService.getPresignedUrl(
-              Number(contact.invited_user.profile_picture),
-              3600,
-            )
+        username: full_name,
+        phone_number,
+        profile_picture: profile_picture
+          ? await this.fileService.getPresignedUrl(Number(profile_picture), 3600)
           : '',
         contactId: contact.id,
         unreadMessagesCount,
+        lastMessage: lastMessage?.content ?? null,
+        read: lastMessage?.read ?? false,
+        lastMessageAt: lastMessage?.createdAt ?? null,
       });
     }
+
     return result;
   }
 

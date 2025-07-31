@@ -84,6 +84,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     try {
       const authHeader: string = (client.handshake.headers['authorization'] ||
         client.handshake.auth?.token) as string;
+
       if (!authHeader) {
         client.disconnect();
         throw new UnauthorizedException('No token provided');
