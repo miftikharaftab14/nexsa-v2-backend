@@ -8,6 +8,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { StoredFile, StoredFileDto } from 'src/files/types/storedFile';
 
 export class CreateBroadcastDto {
   @ApiProperty({
@@ -47,11 +48,10 @@ export class CreateBroadcastDto {
   contactIds: number[];
 
   @ApiProperty({
-    description: 'Media file (optional)',
-    type: 'string',
-    format: 'binary',
+    description: 'Profile image(s) for the gallery (file upload)',
+    type: [StoredFileDto],
     required: false,
   })
   @IsOptional()
-  media?: any;
+  media?: StoredFile[];
 }

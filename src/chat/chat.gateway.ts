@@ -290,11 +290,43 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
   // this is for mark messages ready for a chat
   @SubscribeMessage('mark_read')
-  handleMarkRead(
+  async handleMarkRead(
     @MessageBody() data: MarkReadChatDto,
     @ConnectedSocket() client: AuthenticatedSocket,
   ) {
-    this.logger.log(data, client);
+    this.logger.log(`Marking messages as read for contactId: ${data.contactId}`);
+    const user = client.user;
+
+    if (!user) {
+      throw new UnauthorizedException('Unauthorized');
+    }
+
+    // Mark messages read
+    await this.chatService.markAllMessagesRead(data.contactId);
+
+    // Get the contact
+    const contactResp = await this.contactService.findOne(data.contactId);
+    const contact = contactResp?.data;
+
+    if (!contact) {
+      throw new NotFoundException('Contact not found');
+    }
+
+    // Determine the opposite user
+    const isInvitedUser = contact.invited_user_id === user.id;
+    const oppositeUserId = isInvitedUser ? contact.seller_id : contact.invited_user_id;
+
+    // Fetch socketId of the opposite user
+    const oppositeSocketId = await this.redis.get(
+      `${this.redisPrefix}:user_socket:${oppositeUserId}`,
+    );
+
+    if (oppositeSocketId) {
+      this.server.to(oppositeSocketId).emit('read_ack', {
+        contactId: data.contactId,
+        readerId: user.id,
+      });
+    }
   }
 
   public async emitMessageToUser(userId: number | bigint, message: any) {

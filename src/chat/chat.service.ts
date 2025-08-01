@@ -1,6 +1,13 @@
-import { Inject, Injectable, Logger, UnauthorizedException, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotAcceptableException,
+  UnauthorizedException,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, UpdateResult } from 'typeorm';
+import { DataSource, Repository, UpdateResult } from 'typeorm';
 import { Message, MessageType } from './entities/message.entity';
 import { User } from '../users/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
@@ -12,6 +19,15 @@ import { FileService } from 'src/files/services/file.service';
 import { ApiResponse } from 'src/common/interfaces/api-response.interface';
 import { File } from 'src/files/entities/file.entity';
 import { ChatGateway } from './chat.gateway';
+import { StoredFile } from 'src/files/types/storedFile';
+import {
+  BroadcastResult,
+  ChatResult,
+  ChatType,
+  TransformedBroadcast,
+  TransformedCustomer,
+} from 'src/common/types/chat';
+import { BulkDeleteDto, DeleteType } from './dto/deleteBulkDto.dto';
 
 @Injectable()
 export class ChatService {
@@ -31,6 +47,7 @@ export class ChatService {
     private readonly fileService: FileService,
     @Inject(forwardRef(() => ChatGateway))
     private readonly chatGateway: ChatGateway,
+    private readonly dataSource: DataSource,
   ) {}
   async convertUrls(msgs: Message[]) {
     return await Promise.all(
@@ -82,98 +99,102 @@ export class ChatService {
     message: string;
     contactIds: number[];
     senderId: bigint;
-
-    media: Express.Multer.File[];
+    media?: StoredFile[];
   }): Promise<ApiResponse<Broadcast>> {
     this.logger.log('broadcast is creating with user', String(senderId));
 
-    // 1. Validate sender
-    const user = await this.userService.findOne(senderId);
-    if (!user) {
-      throw new UnauthorizedException(`User with ID ${senderId} not found`);
-    }
+    return await this.dataSource.transaction(async manager => {
+      // 1. Validate sender
+      const user = await this.userService.findOne(senderId);
+      if (!user) {
+        throw new UnauthorizedException(`User with ID ${senderId} not found`);
+      }
 
-    // 2. Create broadcast
-    const broadcast = this.broadcastRepository.create({
-      name,
-      sellerId: senderId,
-    });
-    const savedBroadcast = await this.broadcastRepository.save(broadcast);
-    // 3. Create recipients
-    const recipients = await Promise.all(
-      contactIds.map(async contactId => {
-        const contact = await this.contactRepository.findOne({ where: { id: BigInt(contactId) } });
-        return this.broadcastRecipientRepository.create({
-          broadcastId: savedBroadcast.id,
-          customerId: contact?.invited_user_id,
-        });
-      }),
-    );
-    await this.broadcastRecipientRepository.save(recipients);
-    let mediaUploaded: File[] = [];
-    if (media && media.length > 0) {
-      mediaUploaded = await Promise.all(
-        media.map(async file => await this.fileService.uploadFile(file, 'chat-media')),
+      // 2. Create broadcast
+      const broadcast = this.broadcastRepository.create({ name, sellerId: senderId });
+      const savedBroadcast = await manager.save(broadcast);
+
+      // 3. Create recipients
+      const recipients = await Promise.all(
+        contactIds.map(async contactId => {
+          const contact = await this.contactRepository.findOne({
+            where: { id: BigInt(contactId) },
+          });
+          return this.broadcastRecipientRepository.create({
+            broadcastId: savedBroadcast.id,
+            customerId: contact?.invited_user_id,
+          });
+        }),
       );
-    }
+      await manager.save(recipients);
 
-    // 4. Send message to each contact (create Message entity)
-    const sentMessages: Message[] = [];
+      // 4. Upload media (outside the DB transaction, but handled in parallel)
+      let mediaUploaded: File[] = [];
+      if (media && media.length > 0) {
+        mediaUploaded = await Promise.all(
+          media.map(async file => await this.fileService.storeUploadedFile(file)),
+        );
+      }
 
-    for (const contactId of contactIds) {
-      const bigContactId = BigInt(contactId);
-      const messagesToSave: Message[] = [];
+      // 5. Send message to each contact
+      const sentMessages: Message[] = [];
 
-      // 1. Add media messages (if any)
-      if (mediaUploaded.length > 0) {
-        messagesToSave.push(
-          ...mediaUploaded.map(obj =>
+      for (const contactId of contactIds) {
+        const bigContactId = BigInt(contactId);
+        const messagesToSave: Message[] = [];
+
+        // Media messages
+        if (mediaUploaded.length > 0) {
+          messagesToSave.push(
+            ...mediaUploaded.map(obj =>
+              this.messageRepository.create({
+                contactId: bigContactId,
+                senderId,
+                messageType: MessageType.IMAGE,
+                mediaKey: obj.id,
+                broadcastId: savedBroadcast.id,
+              }),
+            ),
+          );
+        }
+
+        // Text message
+        if (message?.trim()) {
+          messagesToSave.push(
             this.messageRepository.create({
               contactId: bigContactId,
               senderId,
-              messageType: MessageType.IMAGE,
-              mediaKey: obj.id,
+              messageType: MessageType.TEXT,
+              content: message,
               broadcastId: savedBroadcast.id,
             }),
-          ),
+          );
+        }
+
+        // Save messages
+        const saved = await Promise.all(
+          messagesToSave.map(msg => manager.save(msg)), // Save using transactional manager
         );
+
+        // Emit via socket (non-transactional part)
+        for (const savedMsg of saved) {
+          const contact = await this.contactRepository.findOne({ where: { id: bigContactId } });
+          if (!contact) continue;
+          const receiverId =
+            senderId === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+          await this.chatGateway.emitMessageToUser(receiverId, savedMsg);
+        }
+
+        sentMessages.push(...saved);
       }
 
-      // 2. Add text message (if present)
-      if (message?.trim()) {
-        messagesToSave.push(
-          this.messageRepository.create({
-            contactId: bigContactId,
-            senderId,
-            messageType: MessageType.TEXT,
-            content: message,
-            broadcastId: savedBroadcast.id,
-          }),
-        );
-      }
-
-      // 3. Save all messages for this contact in parallel
-      const saved = await Promise.all(messagesToSave.map(msg => this.messageRepository.save(msg)));
-
-      // Emit each message to the recipient via socket
-      for (const savedMsg of saved) {
-        // Find the recipient userId for this contact
-        const contact = await this.contactRepository.findOne({ where: { id: bigContactId } });
-        if (!contact) continue;
-        const receiverId =
-          senderId === contact.seller_id ? contact.invited_user_id : contact.seller_id;
-        await this.chatGateway.emitMessageToUser(receiverId, savedMsg);
-      }
-
-      sentMessages.push(...saved);
-    }
-
-    return {
-      success: true,
-      message: 'broadcast created successfully',
-      status: 200,
-      data: savedBroadcast,
-    };
+      return {
+        success: true,
+        message: 'broadcast created successfully',
+        status: 200,
+        data: savedBroadcast,
+      };
+    });
   }
 
   async getAllChatsForCurrentUser(userId: bigint): Promise<any[]> {
@@ -190,7 +211,7 @@ export class ChatService {
       username: string;
       phone_number: string;
       lastMessage: string | null;
-      lastMessageAt: Date | null;
+      lastMessageAt: string | null;
       read: boolean;
     }[] = [];
 
@@ -215,6 +236,7 @@ export class ChatService {
       });
       const { full_name } = contact;
       const { profile_picture, phone_number } = contact.invited_user;
+      console.log({ lastMessage: lastMessage?.createdAt, type: typeof lastMessage?.createdAt });
 
       result.push({
         username: full_name,
@@ -226,41 +248,184 @@ export class ChatService {
         unreadMessagesCount,
         lastMessage: lastMessage?.content ?? null,
         read: lastMessage?.read ?? false,
-        lastMessageAt: lastMessage?.createdAt ?? null,
+        lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
       });
     }
 
     return result;
   }
 
+  async getBulkChatsForCurrentUser(userId: bigint): Promise<(ChatResult | TransformedBroadcast)[]> {
+    const [contacts, broadcastsRaw] = await Promise.all([
+      this.contactRepository.find({
+        where: [{ seller_id: userId }, { invited_user_id: userId }],
+        relations: ['invited_user'],
+        order: { updated_at: 'DESC' },
+      }),
+      this.dataSource
+        .createQueryBuilder()
+        .select('broadcast.id', 'broadcast_id')
+        .addSelect('broadcast.seller_id', 'broadcast_seller_id')
+        .addSelect('broadcast.name', 'broadcast_name')
+        .addSelect('broadcast.created_at', 'broadcast_created_at')
+        .addSelect('broadcast.updated_at', 'broadcast_updated_at')
+        .addSelect('broadcast.deleted_at', 'broadcast_deleted_at')
+        .addSelect('COUNT(DISTINCT recipient.customer_id)', 'total_recipients_count')
+        .addSelect(
+          `COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object(
+              'customer_id', customer.id,
+              'customer_username', customer.username,
+              'customer_profile_picture', customer.profile_picture,
+              'recipient_deleted_at', recipient.deleted_at
+            )
+          ) FILTER (WHERE customer.id IS NOT NULL),
+          '[]'
+        )`,
+          'customers',
+        )
+        .from(Broadcast, 'broadcast')
+        .leftJoin('broadcast.recipients', 'recipient')
+        .leftJoin('recipient.customer', 'customer')
+        .groupBy('broadcast.id')
+        .where('broadcast.seller_id = :sellerId', { sellerId: userId.toString() })
+        .orderBy('broadcast.id', 'DESC')
+        .getRawMany(),
+    ]);
+
+    const chats: ChatResult[] = [];
+
+    for (const contact of contacts) {
+      const messageCount = await this.messageRepository.count({
+        where: { contactId: contact.id },
+      });
+      if (messageCount === 0) continue;
+
+      const unreadMessagesCount = await this.messageRepository.count({
+        where: {
+          contactId: contact.id,
+          read: false,
+          senderId: contact.seller_id === userId ? contact.invited_user_id : contact.seller_id,
+        },
+      });
+
+      const lastMessage = await this.messageRepository.findOne({
+        where: { contactId: contact.id },
+        order: { createdAt: 'DESC' },
+      });
+      console.log({ lastMessage });
+
+      const { full_name } = contact;
+      const { profile_picture, phone_number } = contact.invited_user;
+
+      chats.push({
+        username: full_name,
+        phone_number,
+        profile_picture: profile_picture
+          ? await this.fileService.getPresignedUrl(Number(profile_picture), 3600)
+          : '',
+        contactId: contact.id,
+        unreadMessagesCount,
+        messageType: lastMessage?.messageType,
+        lastMessage: lastMessage?.content ?? null,
+        read: lastMessage?.read ?? false,
+        lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
+        type: ChatType.CHAT,
+      });
+    }
+
+    const broadcasts: TransformedBroadcast[] = await Promise.all(
+      broadcastsRaw.map(async (broadcast: BroadcastResult) => {
+        const customersWithPresignedUrls: TransformedCustomer[] = await Promise.all(
+          broadcast.customers.map(async customer => ({
+            id: customer.customer_id,
+            name: customer.customer_username,
+            profile_picture: customer.customer_profile_picture
+              ? await this.fileService.getPresignedUrl(customer.customer_profile_picture)
+              : null,
+          })),
+        );
+
+        return {
+          id: broadcast.broadcast_id,
+          seller_id: broadcast.broadcast_seller_id,
+          name: broadcast.broadcast_name,
+          created_at: broadcast.broadcast_created_at,
+          updated_at: broadcast.broadcast_updated_at,
+          deleted_at: broadcast.broadcast_deleted_at,
+          totalRecipientsCount: +broadcast.total_recipients_count,
+          customers: customersWithPresignedUrls,
+          type: ChatType.BROADCAST,
+        };
+      }),
+    );
+
+    return [...chats, ...broadcasts];
+  }
+
   async deleteChat(contactId: bigint): Promise<void> {
     await this.messageRepository.softDelete({ contactId });
   }
 
-  async getBroadcastsBySeller(sellerId: bigint) {
-    const { entities } = await this.broadcastRepository
-      .createQueryBuilder('broadcast')
-      .leftJoinAndSelect('broadcast.recipients', 'recipient')
-      .leftJoinAndSelect('recipient.customer', 'user')
-      .leftJoin(
-        'contacts',
-        'contact',
-        `(
-          (contact.invited_user_id = recipient.customerId AND contact.seller_id = broadcast.sellerId)
-          OR
-          (contact.seller_id = recipient.customerId AND contact.invited_user_id = broadcast.sellerId)
-        )`,
+  async getBroadcastsBySeller(sellerId: bigint): Promise<TransformedBroadcast[]> {
+    const result: BroadcastResult[] = await this.dataSource
+      .createQueryBuilder()
+      .select('broadcast.id', 'broadcast_id')
+      .addSelect('broadcast.seller_id', 'broadcast_seller_id')
+      .addSelect('broadcast.name', 'broadcast_name')
+      .addSelect('broadcast.created_at', 'broadcast_created_at')
+      .addSelect('broadcast.updated_at', 'broadcast_updated_at')
+      .addSelect('broadcast.deleted_at', 'broadcast_deleted_at')
+      .addSelect('COUNT(DISTINCT recipient.customer_id)', 'total_recipients_count')
+      .addSelect(
+        `COALESCE(
+        json_agg(
+          DISTINCT jsonb_build_object(
+            'customer_id', customer.id,
+            'customer_username', customer.username,
+            'customer_profile_picture', customer.profile_picture,
+            'recipient_deleted_at', recipient.deleted_at
+          )
+        ) FILTER (WHERE customer.id IS NOT NULL),
+        '[]'
+      )`,
+        'customers',
       )
-      .addSelect([
-        'contact.id AS contact_id',
-        'recipient.customerId AS customer_id_debug',
-        'broadcast.sellerId AS seller_id_debug',
-      ])
-      .where('broadcast.sellerId = :sellerId', { sellerId })
-      .getRawAndEntities();
+      .from(Broadcast, 'broadcast')
+      .leftJoin('broadcast.recipients', 'recipient')
+      .leftJoin('recipient.customer', 'customer')
+      .groupBy('broadcast.id')
+      .where('broadcast.seller_id = :sellerId', { sellerId: sellerId.toString() })
+      .orderBy('broadcast.id', 'DESC')
+      .getRawMany();
 
-    return entities;
+    return Promise.all(
+      result.map(async broadcast => {
+        const customersWithPresignedUrls: TransformedCustomer[] = await Promise.all(
+          broadcast.customers.map(async customer => ({
+            id: customer.customer_id,
+            name: customer.customer_username,
+            profile_picture: customer.customer_profile_picture
+              ? await this.fileService.getPresignedUrl(customer.customer_profile_picture)
+              : null,
+          })),
+        );
+
+        return {
+          id: broadcast.broadcast_id,
+          seller_id: broadcast.broadcast_seller_id,
+          name: broadcast.broadcast_name,
+          created_at: broadcast.broadcast_created_at,
+          updated_at: broadcast.broadcast_updated_at,
+          deleted_at: broadcast.broadcast_deleted_at,
+          totalRecipientsCount: +broadcast.total_recipients_count,
+          customers: customersWithPresignedUrls,
+        };
+      }),
+    );
   }
+
   async getBroadcastsById(broadcastId: number) {
     // Fetch the broadcast with recipients and their user info
     const broadcast = await this.broadcastRepository.findOne({
@@ -298,6 +463,26 @@ export class ChatService {
   async deleteBroadcastsBySeller(id: number): Promise<UpdateResult> {
     return this.broadcastRepository.softDelete({ id });
   }
+  async deleteBroadcastsAndChat(deleteBulkDto: BulkDeleteDto) {
+    return await Promise.all(
+      deleteBulkDto.data.map(async deleteBulk => {
+        // const id = BigInt(deleteBulk.id); // Ensure correct bigint type
+
+        switch (deleteBulk.type) {
+          case DeleteType.BROADCAST:
+            return this.broadcastRepository.softDelete({ id: Number(deleteBulk.id) });
+
+          case DeleteType.CHAT:
+            // `contactId` is a bigint column — pass a `FindOptionsWhere` object with `bigint`
+            return this.messageRepository.softDelete({ contactId: BigInt(deleteBulk.id) });
+
+          default:
+            return null;
+        }
+      }),
+    );
+  }
+
   async getBroadcastContactIds(broadcastId: number): Promise<number[]> {
     // Get the broadcast to know the sellerId
     const broadcast = await this.broadcastRepository.findOne({ where: { id: broadcastId } });
@@ -322,5 +507,17 @@ export class ChatService {
       .getRawMany();
 
     return contacts.map(r => Number(r.contact_id));
+  }
+  async markAllMessagesRead(contactId: number) {
+    const contact = await this.contactRepository.findOne({
+      where: { id: BigInt(contactId) },
+    });
+    if (!contact) {
+      throw new NotAcceptableException(`Contact not found`);
+    }
+    return await this.messageRepository.update(
+      { contactId: BigInt(contactId), read: false },
+      { read: true },
+    );
   }
 }
