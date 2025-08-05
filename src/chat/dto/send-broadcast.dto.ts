@@ -1,5 +1,7 @@
 import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 import { MessageType } from '../entities/message.entity';
+import { ApiProperty } from '@nestjs/swagger';
+import { StoredFile, StoredFileDto } from 'src/files/types/storedFile';
 
 export class SendBroadcastDto {
   @IsNumber()
@@ -15,7 +17,11 @@ export class SendBroadcastDto {
   @IsOptional()
   content?: string;
 
-  @IsString()
+  @ApiProperty({
+    description: 'image(s) for the broadcast (file upload)',
+    type: [StoredFileDto],
+    required: false,
+  })
   @IsOptional()
-  image?: string;
+  media?: StoredFile[];
 }

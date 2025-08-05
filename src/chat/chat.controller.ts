@@ -57,9 +57,12 @@ export class ChatController {
   }
 
   @Get(':contactId/messages')
-  async getChatMessages(@Param('contactId') contactId: string) {
+  async getChatMessages(
+    @Param('contactId') contactId: string,
+    @CurrentUser() currentUser: CurrentUserType,
+  ) {
     // Implement logic to get all messages for a chat
-    const result = await this.chatService.getConversation(BigInt(contactId));
+    const result = await this.chatService.getConversation(BigInt(contactId), currentUser.userId);
     return {
       success: true,
       message: Messages.CHAT_FETCHED,
@@ -144,8 +147,14 @@ export class ChatController {
   @Post('delete/bulk')
   @ApiOperation({ summary: 'delete a chats or brodcast in bulk' })
   @ApiResponse({ status: 200, description: 'Broadcasts deleted successfully' })
-  async deleteBroadcastsAndChat(@Body() deleteBulkDto: BulkDeleteDto) {
-    const result = await this.chatService.deleteBroadcastsAndChat(deleteBulkDto);
+  async deleteBroadcastsAndChat(
+    @Body() deleteBulkDto: BulkDeleteDto,
+    @CurrentUser() currentUser: CurrentUserType,
+  ) {
+    const result = await this.chatService.deleteBroadcastsAndChat(
+      deleteBulkDto,
+      currentUser.userId,
+    );
     return {
       success: true,
       message: Messages.BRODCAST_DELETED,

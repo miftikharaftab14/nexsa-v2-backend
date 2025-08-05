@@ -19,9 +19,9 @@ export class SendMessageDto {
 
   @ApiProperty({
     description: 'Profile image(s) for the gallery (file upload)',
-    type: StoredFileDto,
+    type: [StoredFileDto],
     required: false,
   })
   @IsOptional()
-  image?: StoredFile;
+  media?: StoredFile[];
 }

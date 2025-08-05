@@ -12,15 +12,17 @@ import { AuthModule } from 'src/auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { FilesModule } from 'src/files/files.module';
+import { DeletedChat } from './entities/deleted-chat.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Message, Broadcast, BroadcastRecipient, Contact]),
+    TypeOrmModule.forFeature([Message, Broadcast, BroadcastRecipient, Contact, DeletedChat]),
     UserModule,
     ContactsModule,
     AuthModule,
     JwtModule.register({}),
     FilesModule,
+
     // No forwardRef needed here unless another module imports ChatModule
   ],
   providers: [ChatGateway, ChatService],

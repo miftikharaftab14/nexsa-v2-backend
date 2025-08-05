@@ -28,6 +28,7 @@ import {
   TransformedCustomer,
 } from 'src/common/types/chat';
 import { BulkDeleteDto, DeleteType } from './dto/deleteBulkDto.dto';
+import { DeletedChat } from './entities/deleted-chat.entity';
 
 @Injectable()
 export class ChatService {
@@ -48,11 +49,15 @@ export class ChatService {
     @Inject(forwardRef(() => ChatGateway))
     private readonly chatGateway: ChatGateway,
     private readonly dataSource: DataSource,
+    @InjectRepository(DeletedChat)
+    private readonly deleteChatRepository: Repository<DeletedChat>,
   ) {}
   async convertUrls(msgs: Message[]) {
     return await Promise.all(
       msgs.map(async msg => ({
         ...msg,
+        createdAt: msg.createdAt.toString(),
+        updatedAt: msg.updatedAt.toString(),
         mediaCont: {
           mediaUrl: await this.fileService.getPresignedUrl(msg.mediaKey),
           thumbnailUrl: await this.fileService.getThumbnailPresignedUrl(msg.mediaKey),
@@ -79,7 +84,13 @@ export class ChatService {
     return this.messageRepository.save(newMessage);
   }
 
-  async getConversation(contactId: bigint): Promise<Message[]> {
+  async getConversation(contactId: bigint, userId: bigint) {
+    console.log({ userId });
+
+    // const lastDelete = await this.deleteChatRepository.find({
+    //   where: { contactId: contactId.toString(), userId: userId.toString() },
+    //   order: { createdAt: 'ASC' },
+    // });
     const messages = await this.messageRepository.find({
       where: { contactId },
       relations: ['sender'],
@@ -150,7 +161,11 @@ export class ChatService {
               this.messageRepository.create({
                 contactId: bigContactId,
                 senderId,
-                messageType: MessageType.IMAGE,
+                messageType: obj.mimeType.startsWith('video/')
+                  ? MessageType.VIDEO
+                  : obj.mimeType.startsWith('image/')
+                    ? MessageType.IMAGE
+                    : MessageType.FILE,
                 mediaKey: obj.id,
                 broadcastId: savedBroadcast.id,
               }),
@@ -212,6 +227,7 @@ export class ChatService {
       phone_number: string;
       lastMessage: string | null;
       lastMessageAt: string | null;
+      messageType?: MessageType;
       read: boolean;
     }[] = [];
 
@@ -249,6 +265,7 @@ export class ChatService {
         lastMessage: lastMessage?.content ?? null,
         read: lastMessage?.read ?? false,
         lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
+        messageType: lastMessage?.messageType,
       });
     }
 
@@ -338,15 +355,26 @@ export class ChatService {
     const broadcasts: TransformedBroadcast[] = await Promise.all(
       broadcastsRaw.map(async (broadcast: BroadcastResult) => {
         const customersWithPresignedUrls: TransformedCustomer[] = await Promise.all(
-          broadcast.customers.map(async customer => ({
-            id: customer.customer_id,
-            name: customer.customer_username,
-            profile_picture: customer.customer_profile_picture
-              ? await this.fileService.getPresignedUrl(customer.customer_profile_picture)
-              : null,
-          })),
-        );
+          broadcast.customers.map(async customer => {
+            const contact = contacts.find(
+              c =>
+                String(c.seller_id) === String(broadcast.broadcast_seller_id) &&
+                String(c.invited_user?.id) === String(customer.customer_id),
+            );
 
+            return {
+              id: customer.customer_id,
+              name: contact?.full_name || '',
+              profile_picture: customer.customer_profile_picture
+                ? await this.fileService.getPresignedUrl(customer.customer_profile_picture)
+                : null,
+            };
+          }),
+        );
+        const lastMessage = await this.messageRepository.findOne({
+          where: { broadcastId: broadcast.broadcast_id },
+          order: { createdAt: 'DESC' },
+        });
         return {
           id: broadcast.broadcast_id,
           seller_id: broadcast.broadcast_seller_id,
@@ -356,12 +384,20 @@ export class ChatService {
           deleted_at: broadcast.broadcast_deleted_at,
           totalRecipientsCount: +broadcast.total_recipients_count,
           customers: customersWithPresignedUrls,
+          lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
           type: ChatType.BROADCAST,
         };
       }),
     );
 
-    return [...chats, ...broadcasts];
+    const combined = [...chats, ...broadcasts];
+    combined.sort((a, b) => {
+      const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    return combined;
   }
 
   async deleteChat(contactId: bigint): Promise<void> {
@@ -420,6 +456,7 @@ export class ChatService {
           updated_at: broadcast.broadcast_updated_at,
           deleted_at: broadcast.broadcast_deleted_at,
           totalRecipientsCount: +broadcast.total_recipients_count,
+          lastMessageAt: '',
           customers: customersWithPresignedUrls,
         };
       }),
@@ -451,19 +488,19 @@ export class ChatService {
     }
 
     // Fetch all messages for this contact and this broadcast
-    let messages = await this.messageRepository.find({
+    const messages = await this.messageRepository.find({
       where: { contactId: contact.id, broadcastId },
       relations: ['sender'],
       order: { createdAt: 'ASC' },
     });
-    messages = await this.convertUrls(messages);
+    const messagesNew = await this.convertUrls(messages);
 
-    return { broadcast, messages };
+    return { broadcast, messages: messagesNew };
   }
   async deleteBroadcastsBySeller(id: number): Promise<UpdateResult> {
     return this.broadcastRepository.softDelete({ id });
   }
-  async deleteBroadcastsAndChat(deleteBulkDto: BulkDeleteDto) {
+  async deleteBroadcastsAndChat(deleteBulkDto: BulkDeleteDto, userId: bigint) {
     return await Promise.all(
       deleteBulkDto.data.map(async deleteBulk => {
         // const id = BigInt(deleteBulk.id); // Ensure correct bigint type
@@ -474,7 +511,12 @@ export class ChatService {
 
           case DeleteType.CHAT:
             // `contactId` is a bigint column — pass a `FindOptionsWhere` object with `bigint`
-            return this.messageRepository.softDelete({ contactId: BigInt(deleteBulk.id) });
+            // return this.messageRepository.softDelete({ contactId: BigInt(deleteBulk.id) });
+
+            return await this.deleteChatRepository.save({
+              contactId: deleteBulk.id.toString(),
+              userId: userId.toString(),
+            });
 
           default:
             return null;
@@ -509,6 +551,8 @@ export class ChatService {
     return contacts.map(r => Number(r.contact_id));
   }
   async markAllMessagesRead(contactId: number) {
+    console.log({ contactId, contactId2: 'contactId' });
+
     const contact = await this.contactRepository.findOne({
       where: { id: BigInt(contactId) },
     });

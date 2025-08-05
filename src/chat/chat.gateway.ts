@@ -21,16 +21,16 @@ import { SendMessageDto } from './dto/send-message.dto';
 import { SendBroadcastDto } from './dto/send-broadcast.dto';
 import { ContactService } from 'src/contacts/services/contact.service';
 import { UserService } from 'src/users/services/user.service';
-import { Contact } from 'src/contacts/entities/contact.entity';
 import { JwtService } from '@nestjs/jwt';
 import { FileService } from 'src/files/services/file.service';
-import { MessageType } from './entities/message.entity';
+import { Message, MessageType } from './entities/message.entity';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { AuthenticatedSocket } from './type/socket-client';
 import { MarkReadChatDto } from './dto/mark-read-chat.dto';
+import { File } from 'src/files/entities/file.entity';
 
 @WebSocketGateway({
   namespace: '/ws/chat',
@@ -154,53 +154,75 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       const sender = await this.userService.findOne(user.id);
       if (!sender) throw new NotFoundException('Sender not found');
 
-      let contact: Contact | null = null;
-      try {
-        const contactResp = await this.contactService.findOne(data.contactId);
-        contact = contactResp?.data;
-      } catch {
-        contact = null;
-      }
-
+      const contactResp = await this.contactService.findOne(data.contactId);
+      const contact = contactResp?.data;
       if (!contact) throw new NotFoundException('Chat/contact not found');
 
-      let mediaKey: number | undefined;
-      const mediaCont: Record<string, string> = {};
+      const mediaCont: Record<number, string> = {};
+      const messages: Message[] = [];
 
-      if (
-        (data.messageType === MessageType.IMAGE || data.messageType === MessageType.FILE) &&
-        data.image
-      ) {
-        const uploadedFile = await this.fileService.storeUploadedFile(data.image);
-        mediaKey = uploadedFile.id;
-        mediaCont.mediaUrl = await this.fileService.getPresignedUrl(mediaKey);
-        delete data.image;
+      // Upload and send messages with media if exists
+      if (Array.isArray(data.media) && data.media.length > 0) {
+        const uploadedFiles = await Promise.all(
+          data.media.map(file => this.fileService.storeUploadedFile(file)),
+        );
+
+        const createdMessages = await Promise.all(
+          uploadedFiles.map(async file => {
+            const mediaUrl = await this.fileService.getPresignedUrl(file.id);
+            mediaCont[file.id] = mediaUrl;
+
+            return await this.chatService.createMessage(
+              contact,
+              sender,
+              file.mimeType.startsWith('video/')
+                ? MessageType.VIDEO
+                : file.mimeType.startsWith('image/')
+                  ? MessageType.IMAGE
+                  : MessageType.FILE,
+              data.content,
+              file.id,
+            );
+          }),
+        );
+
+        messages.push(...createdMessages);
+      } else {
+        // Create message without media
+        const message = await this.chatService.createMessage(
+          contact,
+          sender,
+          data.messageType,
+          data.content,
+        );
+        messages.push(message);
       }
 
-      const message = await this.chatService.createMessage(
-        contact,
-        sender,
-        data.messageType,
-        data.content,
-        mediaKey,
-      );
-
+      // Determine receiver
       const receiverId =
         user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
-      this.logger.log({ receiverId });
-
       const receiverSocketId = await this.redis.get(
         `${this.redisPrefix}:user_socket:${receiverId}`,
       );
-      this.logger.log({ receiverSocketId });
-      if (receiverSocketId) {
-        this.server.to(receiverSocketId).emit('receive_message', { ...message, mediaCont });
-      }
-      this.logger.log(`${this.redisPrefix}:user_socket:${user.id}`);
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
-      if (senderSocketId && senderSocketId !== receiverSocketId) {
-        this.logger.log(`send: ${this.redisPrefix}:user_socket:${user.id}`);
-        this.server.to(senderSocketId).emit('send_message', { ...message, mediaCont });
+
+      // Emit each message to receiver and sender
+      for (const message of messages) {
+        const mediaUrl = message.mediaKey ? mediaCont[message.mediaKey] : null;
+
+        if (receiverSocketId) {
+          this.server.to(receiverSocketId).emit('receive_message', {
+            ...message,
+            mediaUrl,
+          });
+        }
+
+        if (senderSocketId && senderSocketId !== receiverSocketId) {
+          this.server.to(senderSocketId).emit('send_message', {
+            ...message,
+            mediaUrl,
+          });
+        }
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -217,69 +239,90 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       if (typeof data !== 'object' || data === null) {
         throw new BadRequestException('Invalid payload type. Expected an object.');
       }
+
       const user = client.user;
       const sender = await this.userService.findOne(user.id);
       if (!sender) throw new NotFoundException('Sender not found');
-      let mediaKey: number | undefined;
-      const mediaCont: Record<string, string> = {};
 
-      if (
-        (data.messageType === MessageType.IMAGE || data.messageType === MessageType.FILE) &&
-        data.image
-      ) {
-        let base64 = data.image;
-        const matches = base64.match(/^data:(.+);base64,(.+)$/);
-        if (matches) base64 = matches[2];
+      const mediaCont: Record<number, string> = {};
+      const uploadedMediaFiles: File[] = [];
 
-        const buffer = Buffer.from(base64, 'base64');
-        const originalname = data.messageType === MessageType.IMAGE ? 'upload.png' : 'upload.bin';
-        const mimetype =
-          data.messageType === MessageType.IMAGE ? 'image/png' : 'application/octet-stream';
-
-        const uploaded = await this.fileService.uploadBufferAsFile(
-          buffer,
-          originalname,
-          mimetype,
-          buffer.length,
-          'chat-media',
+      // 1. Upload all media files
+      if (Array.isArray(data.media) && data.media.length > 0) {
+        const uploaded = await Promise.all(
+          data.media.map(file => this.fileService.storeUploadedFile(file)),
         );
-        mediaKey = uploaded.id;
-        mediaCont.mediaUrl = await this.fileService.getPresignedUrl(mediaKey);
-        mediaCont.thumbnailUrl = await this.fileService.getThumbnailPresignedUrl(mediaKey);
-        delete data.image;
-      }
-      const broadcastRecivers = await this.chatService.getBroadcastContactIds(data.broadcastId);
-      await Promise.all(
-        broadcastRecivers.map(async contentId => {
-          const { data: contact } = await this.contactService.findOne(contentId);
-          const message = await this.chatService.createMessage(
-            contact,
-            sender,
-            data.messageType,
-            data.content,
-            undefined,
-            data.broadcastId,
-          );
 
+        for (const file of uploaded) {
+          const url = await this.fileService.getPresignedUrl(file.id);
+          mediaCont[file.id] = url;
+          uploadedMediaFiles.push(file);
+        }
+      }
+
+      const broadcastReceivers = await this.chatService.getBroadcastContactIds(data.broadcastId);
+
+      // 2. Create/send message for each media/contact
+      await Promise.all(
+        broadcastReceivers.map(async contactId => {
+          const { data: contact } = await this.contactService.findOne(contactId);
           const receiverId =
             user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
-
           const receiverSocketId = await this.redis.get(
             `${this.redisPrefix}:user_socket:${receiverId}`,
           );
-          if (receiverSocketId) {
-            this.server.to(receiverSocketId).emit('receive_message', { ...message, mediaCont });
+
+          if (uploadedMediaFiles.length > 0) {
+            for (const file of uploadedMediaFiles) {
+              const messageType = file.mimeType.startsWith('video/')
+                ? MessageType.VIDEO
+                : file.mimeType.startsWith('image/')
+                  ? MessageType.IMAGE
+                  : MessageType.FILE;
+
+              const message = await this.chatService.createMessage(
+                contact,
+                sender,
+                messageType,
+                data.content,
+                file.id,
+                data.broadcastId,
+              );
+
+              if (receiverSocketId) {
+                this.server.to(receiverSocketId).emit('receive_message', {
+                  ...message,
+                  mediaUrl: mediaCont[file.id],
+                });
+              }
+            }
+          } else {
+            const message = await this.chatService.createMessage(
+              contact,
+              sender,
+              data.messageType,
+              data.content,
+              undefined,
+              data.broadcastId,
+            );
+
+            if (receiverSocketId) {
+              this.server.to(receiverSocketId).emit('receive_message', {
+                ...message,
+              });
+            }
           }
         }),
       );
 
+      // 3. Optionally, notify sender that broadcast was sent
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
       if (senderSocketId) {
-        this.server.to(senderSocketId).emit('receive_message', {
+        this.server.to(senderSocketId).emit('broadcast_sent', {
           broadcastId: data.broadcastId,
           messageType: data.messageType,
           content: data.content,
-          mediaCont,
+          mediaUrls: mediaCont,
           senderId: sender.id,
         });
       }
@@ -288,6 +331,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       client.emit('error_message', { message });
     }
   }
+
   // this is for mark messages ready for a chat
   @SubscribeMessage('mark_read')
   async handleMarkRead(
