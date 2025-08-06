@@ -30,6 +30,7 @@ export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
   @Get()
+  @Roles(UserRole.CUSTOMER)
   @ApiOperation({ summary: 'get all chats for current user' })
   @ApiResponse({ status: 200, description: 'Chat get successfully' })
   async getAllChats(@CurrentUser() currentUser: CurrentUserType) {
@@ -43,6 +44,7 @@ export class ChatController {
     };
   }
   @Get('bulk')
+  @Roles(UserRole.SELLER)
   @ApiOperation({ summary: 'get all chats and broadcast for current user' })
   @ApiResponse({ status: 200, description: 'Chat get successfully' })
   async getBulkChats(@CurrentUser() currentUser: CurrentUserType) {
@@ -90,6 +92,14 @@ export class ChatController {
     @Body() dto: CreateBroadcastDto,
     @CurrentUser() currentUser: CurrentUserType,
   ) {
+    console.log({
+      name: dto.name,
+      message: dto.message,
+      contactIds: dto.contactIds,
+      senderId: currentUser.userId,
+      media: dto?.media,
+    });
+
     // If media is uploaded, pass its key to the service
     const result = await this.chatService.createBroadcast({
       name: dto.name,

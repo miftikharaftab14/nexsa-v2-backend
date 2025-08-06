@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, UpdateResult } from 'typeorm';
+import { DataSource, FindOptionsWhere, MoreThan, Repository, UpdateResult } from 'typeorm';
 import { Message, MessageType } from './entities/message.entity';
 import { User } from '../users/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
@@ -85,17 +85,25 @@ export class ChatService {
   }
 
   async getConversation(contactId: bigint, userId: bigint) {
-    console.log({ userId });
+    const lastDelete = await this.deleteChatRepository.findOne({
+      where: { contactId: contactId.toString(), userId: userId.toString() },
+      order: { createdAt: 'ASC' },
+    });
 
-    // const lastDelete = await this.deleteChatRepository.find({
-    //   where: { contactId: contactId.toString(), userId: userId.toString() },
-    //   order: { createdAt: 'ASC' },
-    // });
+    const whereCondition: FindOptionsWhere<Message> = {
+      contactId,
+    };
+
+    if (lastDelete) {
+      whereCondition.createdAt = MoreThan(lastDelete.createdAt);
+    }
+
     const messages = await this.messageRepository.find({
-      where: { contactId },
+      where: whereCondition,
       relations: ['sender'],
       order: { createdAt: 'ASC' },
     });
+
     return this.convertUrls(messages);
   }
 
@@ -124,10 +132,10 @@ export class ChatService {
       // 2. Create broadcast
       const broadcast = this.broadcastRepository.create({ name, sellerId: senderId });
       const savedBroadcast = await manager.save(broadcast);
-
       // 3. Create recipients
       const recipients = await Promise.all(
         contactIds.map(async contactId => {
+          this.logger.log(`contact fetching start ${contactId} type ${typeof contactId}`);
           const contact = await this.contactRepository.findOne({
             where: { id: BigInt(contactId) },
           });
@@ -215,7 +223,7 @@ export class ChatService {
   async getAllChatsForCurrentUser(userId: bigint): Promise<any[]> {
     const contacts = await this.contactRepository.find({
       where: [{ seller_id: userId }, { invited_user_id: userId }],
-      relations: ['invited_user'],
+      relations: ['invited_user', 'seller'],
       order: { updated_at: 'DESC' },
     });
 
@@ -229,33 +237,46 @@ export class ChatService {
       lastMessageAt: string | null;
       messageType?: MessageType;
       read: boolean;
+      message: Message | null;
     }[] = [];
 
     for (const contact of contacts) {
-      const messageCount = await this.messageRepository.count({
-        where: { contactId: contact.id },
+      const lastDelete = await this.deleteChatRepository.findOne({
+        where: {
+          contactId: contact.id.toString(),
+          userId: userId.toString(),
+        },
+        order: { createdAt: 'ASC' },
       });
+
+      const messageWhere: any = { contactId: contact.id };
+      const unreadWhere: any = {
+        contactId: contact.id,
+        read: false,
+        senderId: contact.seller_id === userId ? contact.invited_user_id : contact.seller_id,
+      };
+      const lastMessageWhere: any = { contactId: contact.id };
+
+      if (lastDelete?.createdAt) {
+        messageWhere.createdAt = MoreThan(lastDelete.createdAt);
+        unreadWhere.createdAt = MoreThan(lastDelete.createdAt);
+        lastMessageWhere.createdAt = MoreThan(lastDelete.createdAt);
+      }
+
+      const messageCount = await this.messageRepository.count({ where: messageWhere });
       if (messageCount === 0) continue;
 
-      const unreadMessagesCount = await this.messageRepository.count({
-        where: {
-          contactId: contact.id,
-          read: false,
-          senderId: contact.seller_id === userId ? contact.invited_user_id : contact.seller_id,
-        },
-      });
+      const unreadMessagesCount = await this.messageRepository.count({ where: unreadWhere });
 
-      // Fetch the last message
       const lastMessage = await this.messageRepository.findOne({
-        where: { contactId: contact.id },
+        where: lastMessageWhere,
         order: { createdAt: 'DESC' },
       });
-      const { full_name } = contact;
-      const { profile_picture, phone_number } = contact.invited_user;
-      console.log({ lastMessage: lastMessage?.createdAt, type: typeof lastMessage?.createdAt });
+
+      const { profile_picture, phone_number, username } = contact.seller;
 
       result.push({
-        username: full_name,
+        username,
         phone_number,
         profile_picture: profile_picture
           ? await this.fileService.getPresignedUrl(Number(profile_picture), 3600)
@@ -266,6 +287,7 @@ export class ChatService {
         read: lastMessage?.read ?? false,
         lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
         messageType: lastMessage?.messageType,
+        message: lastMessage,
       });
     }
 
@@ -314,24 +336,37 @@ export class ChatService {
     const chats: ChatResult[] = [];
 
     for (const contact of contacts) {
-      const messageCount = await this.messageRepository.count({
-        where: { contactId: contact.id },
+      const lastDelete = await this.deleteChatRepository.findOne({
+        where: {
+          contactId: contact.id.toString(),
+          userId: userId.toString(),
+        },
+        order: { createdAt: 'ASC' },
       });
+
+      const messageWhere: any = { contactId: contact.id };
+      const unreadWhere: any = {
+        contactId: contact.id,
+        read: false,
+        senderId: contact.seller_id === userId ? contact.invited_user_id : contact.seller_id,
+      };
+      const lastMessageWhere: any = { contactId: contact.id };
+
+      if (lastDelete?.createdAt) {
+        messageWhere.createdAt = MoreThan(lastDelete.createdAt);
+        unreadWhere.createdAt = MoreThan(lastDelete.createdAt);
+        lastMessageWhere.createdAt = MoreThan(lastDelete.createdAt);
+      }
+
+      const messageCount = await this.messageRepository.count({ where: messageWhere });
       if (messageCount === 0) continue;
 
-      const unreadMessagesCount = await this.messageRepository.count({
-        where: {
-          contactId: contact.id,
-          read: false,
-          senderId: contact.seller_id === userId ? contact.invited_user_id : contact.seller_id,
-        },
-      });
+      const unreadMessagesCount = await this.messageRepository.count({ where: unreadWhere });
 
       const lastMessage = await this.messageRepository.findOne({
-        where: { contactId: contact.id },
+        where: lastMessageWhere,
         order: { createdAt: 'DESC' },
       });
-      console.log({ lastMessage });
 
       const { full_name } = contact;
       const { profile_picture, phone_number } = contact.invited_user;
@@ -346,6 +381,7 @@ export class ChatService {
         unreadMessagesCount,
         messageType: lastMessage?.messageType,
         lastMessage: lastMessage?.content ?? null,
+        message: lastMessage,
         read: lastMessage?.read ?? false,
         lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
         type: ChatType.CHAT,
@@ -371,10 +407,12 @@ export class ChatService {
             };
           }),
         );
+
         const lastMessage = await this.messageRepository.findOne({
           where: { broadcastId: broadcast.broadcast_id },
           order: { createdAt: 'DESC' },
         });
+
         return {
           id: broadcast.broadcast_id,
           seller_id: broadcast.broadcast_seller_id,
@@ -391,6 +429,7 @@ export class ChatService {
     );
 
     const combined = [...chats, ...broadcasts];
+
     combined.sort((a, b) => {
       const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
       const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
@@ -551,8 +590,6 @@ export class ChatService {
     return contacts.map(r => Number(r.contact_id));
   }
   async markAllMessagesRead(contactId: number) {
-    console.log({ contactId, contactId2: 'contactId' });
-
     const contact = await this.contactRepository.findOne({
       where: { id: BigInt(contactId) },
     });

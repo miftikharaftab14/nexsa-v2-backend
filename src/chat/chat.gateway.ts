@@ -31,6 +31,12 @@ import { UserRole } from 'src/common/enums/user-role.enum';
 import { AuthenticatedSocket } from './type/socket-client';
 import { MarkReadChatDto } from './dto/mark-read-chat.dto';
 import { File } from 'src/files/entities/file.entity';
+import { ProductChatInitiateDto } from './dto/product-chat-initiate.dto';
+import { GalleryImagesService } from 'src/gallery-image/gallery-images.service';
+import { ChatResult } from 'src/common/types/chat';
+import { InjectRepository } from '@nestjs/typeorm';
+import { MoreThan, Repository } from 'typeorm';
+import { DeletedChat } from './entities/deleted-chat.entity';
 
 @WebSocketGateway({
   namespace: '/ws/chat',
@@ -48,11 +54,16 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   constructor(
     private readonly chatService: ChatService,
+    @InjectRepository(Message)
+    private readonly messageRepository: Repository<Message>,
     private readonly contactService: ContactService,
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
+    private readonly galleryImagesService: GalleryImagesService,
+    @InjectRepository(DeletedChat)
+    private readonly deleteChatRepository: Repository<DeletedChat>,
   ) {}
 
   afterInit(server: Server) {
@@ -209,18 +220,69 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       // Emit each message to receiver and sender
       for (const message of messages) {
         const mediaUrl = message.mediaKey ? mediaCont[message.mediaKey] : null;
+        const lastDelete = await this.deleteChatRepository.findOne({
+          where: {
+            contactId: contact.id.toString(),
+            userId: receiverId.toString(),
+          },
+          order: { createdAt: 'ASC' },
+        });
+
+        const messageWhere: any = { contactId: contact.id };
+        const unreadWhere: any = {
+          contactId: contact.id,
+          read: false,
+          senderId: sender.id,
+        };
+        const lastMessageWhere: any = { contactId: contact.id };
+
+        if (lastDelete?.createdAt) {
+          messageWhere.createdAt = MoreThan(lastDelete.createdAt);
+          unreadWhere.createdAt = MoreThan(lastDelete.createdAt);
+          lastMessageWhere.createdAt = MoreThan(lastDelete.createdAt);
+        }
+
+        const unreadMessagesCount = await this.messageRepository.count({ where: unreadWhere });
+
+        const chatMessageResult: ChatResult = {
+          unreadMessagesCount: unreadMessagesCount,
+          username: sender.username,
+          contactId: contact.id,
+          phone_number: sender.phone_number,
+          sender,
+          profile_picture: sender.profile_picture
+            ? await this.fileService.getPresignedUrl(Number(sender.profile_picture), 3600)
+            : '',
+          lastMessage: message.content,
+          lastMessageAt: message.createdAt?.toISOString(),
+          read: false,
+          message,
+          mediaCont: {
+            mediaUrl,
+            thumbnailUrl: '',
+          },
+        };
 
         if (receiverSocketId) {
-          this.server.to(receiverSocketId).emit('receive_message', {
-            ...message,
-            mediaUrl,
-          });
+          this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
         }
 
         if (senderSocketId && senderSocketId !== receiverSocketId) {
           this.server.to(senderSocketId).emit('send_message', {
-            ...message,
-            mediaUrl,
+            unreadMessagesCount: 0,
+            username: contact.full_name,
+            contactId: contact.id,
+            phone_number: contact.phone_number,
+            profile_picture: '',
+            lastMessage: message.content,
+            lastMessageAt: message.createdAt?.toISOString(),
+            sender,
+            read: false,
+            message,
+            mediaCont: {
+              mediaUrl,
+              thumbnailUrl: '',
+            },
           });
         }
       }
@@ -359,6 +421,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     // Determine the opposite user
     const isInvitedUser = contact.invited_user_id === user.id;
     const oppositeUserId = isInvitedUser ? contact.seller_id : contact.invited_user_id;
+    const senderId = isInvitedUser ? contact.invited_user_id : contact.seller_id;
 
     // Fetch socketId of the opposite user
     const oppositeSocketId = await this.redis.get(
@@ -371,10 +434,70 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         readerId: user.id,
       });
     }
+    // Fetch socketId of the sender
+    const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${senderId}`);
+
+    if (senderSocketId) {
+      this.server.to(senderSocketId).emit('read_ack', {
+        contactId: data.contactId,
+        readerId: user.id,
+      });
+    }
+  }
+  @SubscribeMessage('product-chat-initiate')
+  async handleProductChat(
+    @MessageBody() data: ProductChatInitiateDto,
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    try {
+      const { productId, contactId } = data;
+      const user = client.user;
+      if (!user) throw new UnauthorizedException('Unauthorized');
+
+      const sender = await this.userService.findOne(user.id);
+      if (!sender) throw new NotFoundException('Sender not found');
+
+      const contactResp = await this.contactService.findOne(contactId);
+      const contact = contactResp?.data;
+      if (!contact) throw new NotFoundException('Chat/contact not found');
+
+      const galleryImage = await this.galleryImagesService.findOne(productId);
+      if (!galleryImage || !galleryImage.mediaFileId) {
+        throw new NotFoundException('Product or product image not found');
+      }
+      const message = await this.chatService.createMessage(
+        contact,
+        sender,
+        MessageType.MEDIA,
+        '',
+        galleryImage.mediaFileId,
+      );
+      const mediaUrl = await this.fileService.getPresignedUrl(galleryImage.mediaFileId);
+      const receiverId =
+        user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+      const receiverSocketId = await this.redis.get(
+        `${this.redisPrefix}:user_socket:${receiverId}`,
+      );
+      if (receiverSocketId) {
+        this.server.to(receiverSocketId).emit('receive_message', {
+          ...message,
+          mediaUrl,
+        });
+      }
+      const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
+      if (senderSocketId)
+        this.server.to(senderSocketId).emit('send_message', {
+          ...message,
+          mediaUrl,
+        });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      client.emit('product-chat-initiate_error', { message });
+    }
   }
 
   public async emitMessageToUser(userId: number | bigint, message: any) {
-    const socketId = await this.redis.get(`${this.redisPrefix}:user_socket:${userId}`);
+    const socketId = await this.redis.get(`${this.redisPrefix}:user_socket:${userId.toString()}`);
     if (socketId) {
       this.server.to(socketId).emit('receive_message', message);
     }

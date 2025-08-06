@@ -13,6 +13,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { FilesModule } from 'src/files/files.module';
 import { DeletedChat } from './entities/deleted-chat.entity';
+import { GalleryImagesModule } from 'src/gallery-image/gallery-images.module';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { DeletedChat } from './entities/deleted-chat.entity';
     AuthModule,
     JwtModule.register({}),
     FilesModule,
-
+    GalleryImagesModule,
     // No forwardRef needed here unless another module imports ChatModule
   ],
   providers: [ChatGateway, ChatService],

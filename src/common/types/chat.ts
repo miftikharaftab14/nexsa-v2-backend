@@ -1,4 +1,5 @@
-import { MessageType } from 'src/chat/entities/message.entity';
+import { Message, MessageType } from 'src/chat/entities/message.entity';
+import { User } from 'src/users/entities/user.entity';
 
 export enum ChatType {
   BROADCAST = 'broadcast',
@@ -52,4 +53,10 @@ export type ChatResult = {
   read: boolean;
   type?: ChatType;
   messageType?: MessageType;
+  sender?: User;
+  message: Message | null;
+  mediaCont?: {
+    mediaUrl: string | null;
+    thumbnailUrl: string | null;
+  };
 };

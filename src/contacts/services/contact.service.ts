@@ -109,6 +109,7 @@ export class ContactService implements IContactUpdate {
     try {
       this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT);
       const contacts = await this.contactRepo.findAllSelelrsByCustomer(customerId);
+      console.log({ contacts });
 
       this.logger.log(LogMessages.CONTACT_FETCH_SUCCESS);
       const enrichedContacts = await Promise.all(
