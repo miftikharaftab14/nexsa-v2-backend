@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UserRepository } from '../repositories/user.repository';
@@ -211,6 +211,28 @@ export class UserService {
    */
   async updatePreferences(userId: number, preferences: string[]): Promise<User> {
     return this.userRepo.updatePreferences(userId, preferences);
+  }
+  /**
+   * Permanently deletes a user from the system.
+   * @param id - The unique identifier of the user to delete
+   * @throws Error if deletion fails
+   */
+  async softDelete(id: bigint): Promise<void> {
+    try {
+      this.logger.debug(LogMessages.USER_DELETE_ATTEMPT, id);
+      if (!id) {
+        throw new UnauthorizedException('You are not authorize for this action');
+      }
+      await this.userRepo.softDelete(id);
+      this.logger.log(LogMessages.USER_DELETE_SUCCESS, id);
+    } catch (error) {
+      this.logger.error(
+        LogMessages.USER_DELETE_FAILED,
+        error instanceof Error ? error.message : LogMessages.UNKNOWN_ERROR,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
   /**
    * Permanently deletes a user from the system.

@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
   NotAcceptableException,
+  NotFoundException,
   UnauthorizedException,
   forwardRef,
 } from '@nestjs/common';
@@ -234,8 +236,18 @@ export class ChatService {
   }
 
   async getAllChatsForCurrentUser(userId: bigint): Promise<any[]> {
+    const currentUser = await this.userService.findOne(userId);
+    if (!currentUser) {
+      throw new NotFoundException(`user with userId: ${currentUser} is not found`);
+    }
+    if (currentUser.is_deleted) {
+      throw new BadRequestException(`Record with ID ${userId} is not available due to deletion`);
+    }
     const contacts = await this.contactRepository.find({
-      where: [{ seller_id: userId }, { invited_user_id: userId }],
+      where: [
+        { seller_id: userId, seller: { is_deleted: false } },
+        { invited_user_id: userId, seller: { is_deleted: false } },
+      ],
       relations: ['invited_user', 'seller'],
       order: { updated_at: 'DESC' },
     });
@@ -308,9 +320,19 @@ export class ChatService {
   }
 
   async getBulkChatsForCurrentUser(userId: bigint): Promise<(ChatResult | TransformedBroadcast)[]> {
+    const currentUser = await this.userService.findOne(userId);
+    if (!currentUser) {
+      throw new NotFoundException(`user with userId: ${currentUser} is not found`);
+    }
+    if (currentUser.is_deleted) {
+      throw new BadRequestException(`Record with ID ${userId} is not available due to deletion`);
+    }
     const [contacts, broadcastsRaw] = await Promise.all([
       this.contactRepository.find({
-        where: [{ seller_id: userId }, { invited_user_id: userId }],
+        where: [
+          { seller_id: userId },
+          { invited_user_id: userId, invited_user: { is_deleted: false } },
+        ],
         relations: ['invited_user'],
         order: { updated_at: 'DESC' },
       }),
@@ -356,7 +378,6 @@ export class ChatService {
         },
         order: { createdAt: 'DESC' },
       });
-      console.log({ lastDelete });
 
       this.logger.log(
         ` deleted chat data contactId:${contact.id.toString()} userId:${userId.toString()}`,

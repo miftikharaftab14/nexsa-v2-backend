@@ -26,7 +26,7 @@ import { AcceptInviteDto } from '../dto/accept-invite.dto';
 @ApiTags('auth')
 @ApiBearerAuth('JWT-auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
@@ -85,9 +85,7 @@ export class AuthController {
   async resendOtp(
     @Body() resendOtpDto: ResendOtpDto,
   ): Promise<ApiResponseInterface<{ message: string }>> {
-    const result = await this.authService.sendOtp(
-      resendOtpDto.phone_number
-    );
+    const result = await this.authService.sendOtp(resendOtpDto.phone_number);
     return {
       success: true,
       message: Messages.OTP_SENT,
@@ -104,9 +102,7 @@ export class AuthController {
   async acceptInvite(
     @Body() acceptInviteDto: AcceptInviteDto,
   ): Promise<ApiResponseInterface<{ message: string }>> {
-    const result = await this.authService.acceptInvite(
-      acceptInviteDto
-    );
+    const result = await this.authService.acceptInvite(acceptInviteDto);
     return {
       success: true,
       message: Messages.INVITATION_ACCEPTED,
@@ -114,6 +110,4 @@ export class AuthController {
       data: result,
     };
   }
-
 }
-

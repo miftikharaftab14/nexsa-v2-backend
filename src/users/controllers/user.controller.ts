@@ -48,10 +48,12 @@ import {
   _400_profile_picture,
   _404_profile_picture,
 } from '../documentaion/api.response';
+import { CurrentUser } from 'src/common/decorators/user.decorator';
+import { CurrentUserType } from 'src/common/types/current-user.interface';
 
 @ApiTags('Users')
 @Controller('users')
-// @UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -177,6 +179,26 @@ export class UserController {
     };
   }
 
+  @Delete('confirm')
+  @ApiBearerAuth('JWT-auth') // Swagger JWT header name
+  @ApiOperation({ summary: Descriptions.DELETE_USER_SUMMARY })
+  @ApiResponse(_200_user_delete)
+  @ApiResponse(_404_users)
+  @ApiResponse(_401_users)
+  @ApiResponse(_403_users)
+  async deleteConfirm(
+    @CurrentUser() currentUser: CurrentUserType,
+  ): Promise<CustomApiResponse<null>> {
+    console.log({ currentUser });
+
+    await this.userService.softDelete(currentUser?.userId);
+    return {
+      success: true,
+      message: Messages.USER_DELETED,
+      status: HttpStatus.OK,
+      data: null,
+    };
+  }
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: Descriptions.DELETE_USER_SUMMARY })
