@@ -1,9 +1,15 @@
-import { IsNumber } from 'class-validator';
+import { IsNumber, IsString } from 'class-validator';
 
 export class ProductChatInitiateDto {
   @IsNumber()
-  contactId: number;
+  sellerId: number;
 
   @IsNumber()
   productId: number;
+
+  @IsString()
+  content: string;
+
+  @IsString()
+  messageType: string;
 }

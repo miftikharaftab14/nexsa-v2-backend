@@ -92,14 +92,6 @@ export class ChatController {
     @Body() dto: CreateBroadcastDto,
     @CurrentUser() currentUser: CurrentUserType,
   ) {
-    console.log({
-      name: dto.name,
-      message: dto.message,
-      contactIds: dto.contactIds,
-      senderId: currentUser.userId,
-      media: dto?.media,
-    });
-
     // If media is uploaded, pass its key to the service
     const result = await this.chatService.createBroadcast({
       name: dto.name,

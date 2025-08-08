@@ -105,6 +105,7 @@ export class ContactService implements IContactUpdate {
       });
     }
   }
+
   async findAllSelelrsByCustomer(customerId: bigint): Promise<ApiResponse<SellerInfoType[]>> {
     try {
       this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT);
@@ -318,5 +319,8 @@ export class ContactService implements IContactUpdate {
   async findContactsBySeller(sellerId: bigint) {
     const result = await this.contactRepo.findContactsBySeller(sellerId);
     return Promise.all(result.map(context => this.convertUserImagePresignedUrl(context)));
+  }
+  async findBySellerAndCustomer(sellerId: number, customerId: bigint) {
+    return this.contactRepo.findBySellerAndCustomer(BigInt(sellerId), customerId);
   }
 }

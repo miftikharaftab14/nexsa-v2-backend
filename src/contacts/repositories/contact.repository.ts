@@ -23,6 +23,7 @@ export class ContactRepository extends BaseRepository<Contact> {
     }
     return super.create(data);
   }
+
   async findAllSelelrsByCustomer(customerId: bigint): Promise<SellerInfoType[]> {
     return (
       this.repository
@@ -137,5 +138,13 @@ export class ContactRepository extends BaseRepository<Contact> {
     });
 
     return contacts;
+  }
+  async findBySellerAndCustomer(seller_id: bigint, invited_user_id: bigint) {
+    return this.repository.findOne({
+      where: {
+        seller_id,
+        invited_user_id,
+      },
+    });
   }
 }

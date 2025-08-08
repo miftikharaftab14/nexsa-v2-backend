@@ -87,7 +87,7 @@ export class ChatService {
   async getConversation(contactId: bigint, userId: bigint) {
     const lastDelete = await this.deleteChatRepository.findOne({
       where: { contactId: contactId.toString(), userId: userId.toString() },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: 'DESC' },
     });
 
     const whereCondition: FindOptionsWhere<Message> = {
@@ -120,104 +120,117 @@ export class ChatService {
     senderId: bigint;
     media?: StoredFile[];
   }): Promise<ApiResponse<Broadcast>> {
-    this.logger.log('broadcast is creating with user', String(senderId));
+    try {
+      this.logger.log('broadcast is creating with user', String(senderId));
 
-    return await this.dataSource.transaction(async manager => {
-      // 1. Validate sender
-      const user = await this.userService.findOne(senderId);
-      if (!user) {
-        throw new UnauthorizedException(`User with ID ${senderId} not found`);
-      }
+      return await this.dataSource.transaction(async manager => {
+        // 1. Validate sender
+        const user = await this.userService.findOne(senderId);
+        if (!user) {
+          throw new UnauthorizedException(`User with ID ${senderId} not found`);
+        }
 
-      // 2. Create broadcast
-      const broadcast = this.broadcastRepository.create({ name, sellerId: senderId });
-      const savedBroadcast = await manager.save(broadcast);
-      // 3. Create recipients
-      const recipients = await Promise.all(
-        contactIds.map(async contactId => {
-          this.logger.log(`contact fetching start ${contactId} type ${typeof contactId}`);
-          const contact = await this.contactRepository.findOne({
-            where: { id: BigInt(contactId) },
-          });
-          return this.broadcastRecipientRepository.create({
-            broadcastId: savedBroadcast.id,
-            customerId: contact?.invited_user_id,
-          });
-        }),
-      );
-      await manager.save(recipients);
-
-      // 4. Upload media (outside the DB transaction, but handled in parallel)
-      let mediaUploaded: File[] = [];
-      if (media && media.length > 0) {
-        mediaUploaded = await Promise.all(
-          media.map(async file => await this.fileService.storeUploadedFile(file)),
+        // 2. Create broadcast
+        const broadcast = this.broadcastRepository.create({ name, sellerId: senderId });
+        const savedBroadcast = await manager.save(broadcast);
+        // 3. Create recipients
+        const recipients = await Promise.all(
+          contactIds.map(async contactId => {
+            this.logger.log(`contact fetching start ${contactId} type ${typeof contactId}`);
+            const contact = await this.contactRepository.findOne({
+              where: { id: BigInt(contactId) },
+            });
+            return this.broadcastRecipientRepository.create({
+              broadcastId: savedBroadcast.id,
+              customerId: contact?.invited_user_id,
+            });
+          }),
         );
-      }
+        await manager.save(recipients);
 
-      // 5. Send message to each contact
-      const sentMessages: Message[] = [];
+        // 4. Upload media (outside the DB transaction, but handled in parallel)
+        let mediaUploaded: File[] = [];
+        if (media && media.length > 0) {
+          mediaUploaded = await Promise.all(
+            media.map(async file => await this.fileService.storeUploadedFile(file)),
+          );
+        }
 
-      for (const contactId of contactIds) {
-        const bigContactId = BigInt(contactId);
-        const messagesToSave: Message[] = [];
+        // 5. Send message to each contact
+        const sentMessages: Message[] = [];
 
-        // Media messages
-        if (mediaUploaded.length > 0) {
-          messagesToSave.push(
-            ...mediaUploaded.map(obj =>
+        for (const contactId of contactIds) {
+          const bigContactId = BigInt(contactId);
+          const messagesToSave: Message[] = [];
+
+          // Media messages
+          if (mediaUploaded.length > 0) {
+            messagesToSave.push(
+              ...mediaUploaded.map(obj =>
+                this.messageRepository.create({
+                  contactId: bigContactId,
+                  senderId,
+                  messageType: obj.mimeType.startsWith('video/')
+                    ? MessageType.VIDEO
+                    : obj.mimeType.startsWith('image/')
+                      ? MessageType.IMAGE
+                      : MessageType.FILE,
+                  mediaKey: obj.id,
+                  broadcastId: savedBroadcast.id,
+                }),
+              ),
+            );
+          }
+
+          // Text message
+          if (message?.trim()) {
+            messagesToSave.push(
               this.messageRepository.create({
                 contactId: bigContactId,
                 senderId,
-                messageType: obj.mimeType.startsWith('video/')
-                  ? MessageType.VIDEO
-                  : obj.mimeType.startsWith('image/')
-                    ? MessageType.IMAGE
-                    : MessageType.FILE,
-                mediaKey: obj.id,
+                messageType: MessageType.TEXT,
+                content: message,
                 broadcastId: savedBroadcast.id,
               }),
-            ),
+            );
+          }
+
+          // Save messages
+          const saved = await Promise.all(
+            messagesToSave.map(msg => manager.save(msg)), // Save using transactional manager
           );
+
+          // Emit via socket (non-transactional part)
+          for (const savedMsg of saved) {
+            const contact = await this.contactRepository.findOne({ where: { id: bigContactId } });
+            if (!contact) continue;
+            const receiverId =
+              senderId === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+            await this.chatGateway.emitMessageToUser(
+              contact.id,
+              receiverId,
+              user,
+              contact,
+              savedMsg,
+              savedMsg.mediaKey ? await this.fileService.getPresignedUrl(savedMsg.mediaKey) : null,
+            );
+          }
+
+          sentMessages.push(...saved);
         }
 
-        // Text message
-        if (message?.trim()) {
-          messagesToSave.push(
-            this.messageRepository.create({
-              contactId: bigContactId,
-              senderId,
-              messageType: MessageType.TEXT,
-              content: message,
-              broadcastId: savedBroadcast.id,
-            }),
-          );
-        }
-
-        // Save messages
-        const saved = await Promise.all(
-          messagesToSave.map(msg => manager.save(msg)), // Save using transactional manager
-        );
-
-        // Emit via socket (non-transactional part)
-        for (const savedMsg of saved) {
-          const contact = await this.contactRepository.findOne({ where: { id: bigContactId } });
-          if (!contact) continue;
-          const receiverId =
-            senderId === contact.seller_id ? contact.invited_user_id : contact.seller_id;
-          await this.chatGateway.emitMessageToUser(receiverId, savedMsg);
-        }
-
-        sentMessages.push(...saved);
-      }
-
-      return {
-        success: true,
-        message: 'broadcast created successfully',
-        status: 200,
-        data: savedBroadcast,
-      };
-    });
+        return {
+          success: true,
+          message: 'broadcast created successfully',
+          status: 200,
+          data: savedBroadcast,
+        };
+      });
+    } catch (error) {
+      this.logger.log('Error in creation of broadcast');
+      console.log(error);
+      throw Error(error);
+    }
   }
 
   async getAllChatsForCurrentUser(userId: bigint): Promise<any[]> {
@@ -246,7 +259,7 @@ export class ChatService {
           contactId: contact.id.toString(),
           userId: userId.toString(),
         },
-        order: { createdAt: 'ASC' },
+        order: { createdAt: 'DESC' },
       });
 
       const messageWhere: any = { contactId: contact.id };
@@ -341,9 +354,13 @@ export class ChatService {
           contactId: contact.id.toString(),
           userId: userId.toString(),
         },
-        order: { createdAt: 'ASC' },
+        order: { createdAt: 'DESC' },
       });
+      console.log({ lastDelete });
 
+      this.logger.log(
+        ` deleted chat data contactId:${contact.id.toString()} userId:${userId.toString()}`,
+      );
       const messageWhere: any = { contactId: contact.id };
       const unreadWhere: any = {
         contactId: contact.id,
@@ -442,7 +459,13 @@ export class ChatService {
   async deleteChat(contactId: bigint): Promise<void> {
     await this.messageRepository.softDelete({ contactId });
   }
-
+  async findBroadcast(id: number) {
+    return this.broadcastRepository.findOne({
+      where: {
+        id,
+      },
+    });
+  }
   async getBroadcastsBySeller(sellerId: bigint): Promise<TransformedBroadcast[]> {
     const result: BroadcastResult[] = await this.dataSource
       .createQueryBuilder()
@@ -599,6 +622,93 @@ export class ChatService {
     return await this.messageRepository.update(
       { contactId: BigInt(contactId), read: false },
       { read: true },
+    );
+  }
+  async findContactByBroadcastId(broadcastId: number, currentUserId: bigint) {
+    this.logger.debug(
+      `Fetching contacts with unread message count broadcastId: ${broadcastId} currentUserId: ${currentUserId}`,
+    );
+
+    return (
+      this.broadcastRepository
+        .createQueryBuilder('broadcast')
+        .leftJoin('broadcast.recipients', 'recipient')
+        .leftJoin(
+          'contacts',
+          'contacts',
+          `
+        contacts.seller_id = broadcast.seller_id
+        AND contacts.invited_user_id = recipient.customer_id
+      `,
+        )
+        .leftJoin(
+          'messages',
+          'message',
+          `
+        message.contact_id = contacts.id
+        AND message.broadcast_id = broadcast.id
+        AND message.read = false
+      `,
+        )
+        // Subquery: last message not deleted
+        .leftJoin(
+          qb =>
+            qb
+              .select('m.id', 'id')
+              .addSelect('m.contact_id', 'contact_id')
+              .addSelect('m.content', 'content')
+              .addSelect('m.created_at', 'created_at')
+              .addSelect('m.read', 'read') // ← Added this
+              .from('messages', 'm')
+              .where('m.broadcast_id = :broadcastId', { broadcastId }).andWhere(`
+            NOT EXISTS (
+              SELECT 1 FROM deleted_chats dc
+              WHERE dc.contact_id = m.contact_id
+                AND dc.user_id = :currentUserId
+            )
+          `).andWhere(`
+            m.id = (
+              SELECT id FROM messages
+              WHERE contact_id = m.contact_id
+                AND broadcast_id = :broadcastId
+              ORDER BY created_at DESC
+              LIMIT 1
+            )
+          `),
+          'last_message',
+          'last_message.contact_id = contacts.id',
+        )
+        .where('broadcast.id = :broadcastId', { broadcastId })
+        .andWhere(
+          `
+      NOT EXISTS (
+        SELECT 1 FROM deleted_chats dc
+        WHERE dc.contact_id = contacts.id
+          AND dc.user_id = :currentUserId
+      )
+    `,
+        )
+        .setParameters({ broadcastId, currentUserId })
+        .select([
+          'COUNT(message.id) AS unreadMessagesCount',
+          'contacts.full_name AS username',
+          'contacts.id AS contactId',
+          'contacts.phone_number AS phoneNumber',
+          'last_message.content AS lastMessage',
+          'last_message.created_at AS lastMessageAt',
+          'last_message.read AS read',
+          'contacts.invited_user_id AS userId',
+          'contacts.seller_id AS sellerId',
+        ])
+        .groupBy('contacts.id')
+        .addGroupBy('contacts.full_name')
+        .addGroupBy('contacts.phone_number')
+        .addGroupBy('contacts.invited_user_id')
+        .addGroupBy('contacts.seller_id')
+        .addGroupBy('last_message.content')
+        .addGroupBy('last_message.created_at')
+        .addGroupBy('last_message.read')
+        .getRawMany()
     );
   }
 }

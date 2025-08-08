@@ -33,10 +33,12 @@ import { MarkReadChatDto } from './dto/mark-read-chat.dto';
 import { File } from 'src/files/entities/file.entity';
 import { ProductChatInitiateDto } from './dto/product-chat-initiate.dto';
 import { GalleryImagesService } from 'src/gallery-image/gallery-images.service';
-import { ChatResult } from 'src/common/types/chat';
+import { ChatResult, ChatType, TransformedBroadcast } from 'src/common/types/chat';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, Repository } from 'typeorm';
 import { DeletedChat } from './entities/deleted-chat.entity';
+import { User } from 'src/users/entities/user.entity';
+import { Contact } from 'src/contacts/entities/contact.entity';
 
 @WebSocketGateway({
   namespace: '/ws/chat',
@@ -220,48 +222,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       // Emit each message to receiver and sender
       for (const message of messages) {
         const mediaUrl = message.mediaKey ? mediaCont[message.mediaKey] : null;
-        const lastDelete = await this.deleteChatRepository.findOne({
-          where: {
-            contactId: contact.id.toString(),
-            userId: receiverId.toString(),
-          },
-          order: { createdAt: 'ASC' },
-        });
-
-        const messageWhere: any = { contactId: contact.id };
-        const unreadWhere: any = {
-          contactId: contact.id,
-          read: false,
-          senderId: sender.id,
-        };
-        const lastMessageWhere: any = { contactId: contact.id };
-
-        if (lastDelete?.createdAt) {
-          messageWhere.createdAt = MoreThan(lastDelete.createdAt);
-          unreadWhere.createdAt = MoreThan(lastDelete.createdAt);
-          lastMessageWhere.createdAt = MoreThan(lastDelete.createdAt);
-        }
-
-        const unreadMessagesCount = await this.messageRepository.count({ where: unreadWhere });
-
-        const chatMessageResult: ChatResult = {
-          unreadMessagesCount: unreadMessagesCount,
-          username: sender.username,
-          contactId: contact.id,
-          phone_number: sender.phone_number,
+        const chatMessageResult = await this.reciverMessage(
+          contact.id,
+          receiverId,
           sender,
-          profile_picture: sender.profile_picture
-            ? await this.fileService.getPresignedUrl(Number(sender.profile_picture), 3600)
-            : '',
-          lastMessage: message.content,
-          lastMessageAt: message.createdAt?.toISOString(),
-          read: false,
+          contact,
           message,
-          mediaCont: {
-            mediaUrl,
-            thumbnailUrl: '',
-          },
-        };
+          mediaUrl,
+        );
 
         if (receiverSocketId) {
           this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
@@ -291,7 +259,58 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       client.emit('error_message', { message });
     }
   }
+  async reciverMessage(
+    contactId: bigint,
+    receiverId: bigint,
+    sender: User,
+    contact: Contact,
+    message: Message,
+    mediaUrl: string | null,
+  ): Promise<ChatResult> {
+    const lastDelete = await this.deleteChatRepository.findOne({
+      where: {
+        contactId: contactId.toString(),
+        userId: receiverId.toString(),
+      },
+      order: { createdAt: 'DESC' },
+    });
 
+    const messageWhere: any = { contactId };
+    const unreadWhere: any = {
+      contactId: contactId,
+      read: false,
+      senderId: sender.id,
+    };
+    const lastMessageWhere: any = { contactId };
+
+    if (lastDelete?.createdAt) {
+      messageWhere.createdAt = MoreThan(lastDelete.createdAt);
+      unreadWhere.createdAt = MoreThan(lastDelete.createdAt);
+      lastMessageWhere.createdAt = MoreThan(lastDelete.createdAt);
+    }
+
+    const unreadMessagesCount = await this.messageRepository.count({ where: unreadWhere });
+    this.logger.log(`unread message count ${unreadMessagesCount}`);
+    const chatMessageResult: ChatResult = {
+      unreadMessagesCount: unreadMessagesCount,
+      username: sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
+      contactId: contactId,
+      phone_number: sender.phone_number,
+      sender,
+      profile_picture: sender.profile_picture
+        ? await this.fileService.getPresignedUrl(Number(sender.profile_picture), 3600)
+        : '',
+      lastMessage: message.content,
+      lastMessageAt: message.createdAt?.toISOString(),
+      read: false,
+      message,
+      mediaCont: {
+        mediaUrl: mediaUrl,
+        thumbnailUrl: '',
+      },
+    };
+    return chatMessageResult;
+  }
   @SubscribeMessage('send_broadcast')
   async handleSendBroadcast(
     @MessageBody() data: SendBroadcastDto,
@@ -301,7 +320,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       if (typeof data !== 'object' || data === null) {
         throw new BadRequestException('Invalid payload type. Expected an object.');
       }
-
+      const broadcast = await this.chatService.findBroadcast(data.broadcastId);
+      if (!broadcast) throw new NotFoundException('broadcast not found');
       const user = client.user;
       const sender = await this.userService.findOne(user.id);
       if (!sender) throw new NotFoundException('Sender not found');
@@ -350,12 +370,16 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 file.id,
                 data.broadcastId,
               );
-
+              const chatMessageResult = await this.reciverMessage(
+                contact.id,
+                receiverId,
+                sender,
+                contact,
+                message,
+                mediaCont[file.id],
+              );
               if (receiverSocketId) {
-                this.server.to(receiverSocketId).emit('receive_message', {
-                  ...message,
-                  mediaUrl: mediaCont[file.id],
-                });
+                this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
               }
             }
           } else {
@@ -367,26 +391,42 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
               undefined,
               data.broadcastId,
             );
-
+            const chatMessageResult = await this.reciverMessage(
+              contact.id,
+              receiverId,
+              sender,
+              contact,
+              message,
+              null,
+            );
             if (receiverSocketId) {
-              this.server.to(receiverSocketId).emit('receive_message', {
-                ...message,
-              });
+              this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
             }
           }
         }),
       );
 
       // 3. Optionally, notify sender that broadcast was sent
-      const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
+      const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${sender.id}`);
+      this.logger.log(
+        `broadcast sender socket details sender id: ${sender.id} senderSocketId: ${senderSocketId}`,
+      );
       if (senderSocketId) {
-        this.server.to(senderSocketId).emit('broadcast_sent', {
-          broadcastId: data.broadcastId,
-          messageType: data.messageType,
-          content: data.content,
-          mediaUrls: mediaCont,
-          senderId: sender.id,
-        });
+        const senderMessageData: TransformedBroadcast = {
+          id: broadcast.id,
+          seller_id: broadcast.sellerId.toString(),
+          name: broadcast.name,
+          created_at: broadcast.createdAt,
+          updated_at: broadcast.updatedAt,
+          deleted_at: broadcast.deletedAt || null,
+          totalRecipientsCount: +broadcastReceivers.length,
+          customers: [],
+          lastMessageAt: new Date()?.toISOString() ?? null,
+          type: ChatType.BROADCAST,
+        };
+        console.log({ senderMessageData });
+
+        this.server.to(senderSocketId).emit('broadcast_sent', senderMessageData);
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -450,45 +490,72 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     @ConnectedSocket() client: AuthenticatedSocket,
   ) {
     try {
-      const { productId, contactId } = data;
+      const { productId, sellerId, content, messageType } = data;
       const user = client.user;
       if (!user) throw new UnauthorizedException('Unauthorized');
 
       const sender = await this.userService.findOne(user.id);
       if (!sender) throw new NotFoundException('Sender not found');
 
-      const contactResp = await this.contactService.findOne(contactId);
-      const contact = contactResp?.data;
+      const contact = await this.contactService.findBySellerAndCustomer(sellerId, sender.id);
       if (!contact) throw new NotFoundException('Chat/contact not found');
 
       const galleryImage = await this.galleryImagesService.findOne(productId);
       if (!galleryImage || !galleryImage.mediaFileId) {
         throw new NotFoundException('Product or product image not found');
       }
-      const message = await this.chatService.createMessage(
+      await this.chatService.createMessage(
         contact,
         sender,
-        MessageType.MEDIA,
+        messageType as MessageType,
         '',
         galleryImage.mediaFileId,
       );
+      const message = await this.chatService.createMessage(
+        contact,
+        sender,
+        MessageType.TEXT,
+        content,
+        galleryImage.mediaFileId,
+      );
+
       const mediaUrl = await this.fileService.getPresignedUrl(galleryImage.mediaFileId);
       const receiverId =
         user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+      const reciver = await this.userService.findOne(receiverId);
       const receiverSocketId = await this.redis.get(
         `${this.redisPrefix}:user_socket:${receiverId}`,
       );
       if (receiverSocketId) {
-        this.server.to(receiverSocketId).emit('receive_message', {
-          ...message,
+        const resultMessage = await this.reciverMessage(
+          contact.id,
+          receiverId,
+          sender,
+          contact,
+          message,
           mediaUrl,
-        });
+        );
+        this.server.to(receiverSocketId).emit('receive_message', resultMessage);
       }
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
       if (senderSocketId)
         this.server.to(senderSocketId).emit('send_message', {
-          ...message,
-          mediaUrl,
+          unreadMessagesCount: 0,
+          username: reciver?.username,
+          contactId: contact.id,
+          phone_number: reciver?.phone_number,
+          profile_picture: reciver?.profile_picture
+            ? await this.fileService.getPresignedUrl(Number(reciver?.profile_picture), 3600)
+            : '',
+          lastMessage: message.content,
+          lastMessageAt: message.createdAt?.toISOString(),
+          sender,
+          read: false,
+          message,
+          mediaCont: {
+            mediaUrl,
+            thumbnailUrl: '',
+          },
         });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -496,10 +563,34 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
   }
 
-  public async emitMessageToUser(userId: number | bigint, message: any) {
-    const socketId = await this.redis.get(`${this.redisPrefix}:user_socket:${userId.toString()}`);
+  public async emitMessageToUser(
+    contactId: bigint,
+    receiverId: bigint,
+    sender: User,
+    contact: Contact,
+    message: Message,
+    mediaUrl: string | null,
+  ) {
+    const resultMessage = await this.reciverMessage(
+      contactId,
+      receiverId,
+      sender,
+      contact,
+      message,
+      mediaUrl,
+    );
+    const socketId = await this.redis.get(
+      `${this.redisPrefix}:user_socket:${receiverId.toString()}`,
+    );
+
     if (socketId) {
-      this.server.to(socketId).emit('receive_message', message);
+      this.server.to(socketId).emit('receive_message', {
+        ...resultMessage,
+        message: {
+          ...resultMessage.message,
+          contactId: resultMessage.message?.contactId.toString(),
+        },
+      });
     }
   }
 }

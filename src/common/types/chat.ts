@@ -41,6 +41,7 @@ export interface TransformedBroadcast {
   customers: TransformedCustomer[];
   type?: ChatType;
   lastMessageAt: string | null;
+  contactsList?: any[];
 }
 export type ChatResult = {
   unreadMessagesCount: number;
