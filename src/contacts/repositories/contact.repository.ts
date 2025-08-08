@@ -25,56 +25,49 @@ export class ContactRepository extends BaseRepository<Contact> {
   }
 
   async findAllSelelrsByCustomer(customerId: bigint): Promise<SellerInfoType[]> {
-    return (
-      this.repository
-        .createQueryBuilder('contact')
-        .innerJoin('users', 'seller', 'seller.id = contact.seller_id')
-
-        // Left join subquery to count galleries per seller
-        .leftJoin(
-          qb =>
-            qb
-              .select('p.user_id', 'seller_id')
-              .addSelect('COUNT(*)', 'total_gallery_image_count')
-              .from('gallery_image', 'p')
-              .where('p.is_deleted = false')
-              .groupBy('p.user_id'),
-          'prod_count',
-          'prod_count.seller_id = contact.seller_id',
-        )
-
-        // Left join subquery to count galleries per seller
-        .leftJoin(
-          qb =>
-            qb
-              .select('g.user_id', 'seller_id')
-              .addSelect('COUNT(*)', 'total_galleries_count')
-              .from('galleries', 'g')
-              .where('g.is_deleted = false')
-              .groupBy('g.user_id'),
-          'gallery_count',
-          'gallery_count.seller_id = contact.seller_id',
-        )
-
-        .select([
-          'contact.seller_id AS id',
-          'seller.id AS user_id',
-          'seller.username AS username',
-          'seller.email AS email',
-          'contact.id AS "contactId"',
-          'seller.profile_picture AS profile_picture',
-          'COALESCE(gallery_count.total_galleries_count, 0) AS total_galleries_count',
-          'COALESCE(prod_count.total_gallery_image_count, 0) AS total_gallery_image_count',
-        ])
-        .where('contact.invited_user_id = :customerId', { customerId: BigInt(customerId) })
-        .andWhere('contact.status = :status', { status: ContactStatus.ACCEPTED })
-        .getRawMany()
-    );
+    return this.repository
+      .createQueryBuilder('contact')
+      .innerJoin('users', 'seller', 'seller.id = contact.seller_id AND seller.is_deleted= false')
+      .leftJoin(
+        qb =>
+          qb
+            .select('p.user_id', 'seller_id')
+            .addSelect('COUNT(*)', 'total_gallery_image_count')
+            .from('gallery_image', 'p')
+            .where('p.is_deleted = false')
+            .groupBy('p.user_id'),
+        'prod_count',
+        'prod_count.seller_id = contact.seller_id',
+      )
+      .leftJoin(
+        qb =>
+          qb
+            .select('g.user_id', 'seller_id')
+            .addSelect('COUNT(*)', 'total_galleries_count')
+            .from('galleries', 'g')
+            .where('g.is_deleted = false')
+            .groupBy('g.user_id'),
+        'gallery_count',
+        'gallery_count.seller_id = contact.seller_id',
+      )
+      .select([
+        'contact.seller_id AS id',
+        'seller.id AS user_id',
+        'seller.username AS username',
+        'seller.email AS email',
+        'contact.id AS "contactId"',
+        'seller.profile_picture AS profile_picture',
+        'COALESCE(gallery_count.total_galleries_count, 0) AS total_galleries_count',
+        'COALESCE(prod_count.total_gallery_image_count, 0) AS total_gallery_image_count',
+      ])
+      .where('contact.invited_user_id = :customerId', { customerId: BigInt(customerId) })
+      .andWhere('contact.status = :status', { status: ContactStatus.ACCEPTED })
+      .getRawMany();
   }
 
   async findBySellerId(sellerId: number | bigint): Promise<Contact[]> {
     return this.repository.find({
-      where: { seller_id: BigInt(sellerId) },
+      where: { seller_id: BigInt(sellerId), invited_user: { is_deleted: false } },
       relations: ['seller'],
       order: { created_at: 'DESC' },
     });
@@ -106,7 +99,7 @@ export class ContactRepository extends BaseRepository<Contact> {
     // Fetch contacts with invited user (including profile_picture)
     const contacts = await this.repository
       .createQueryBuilder('contact')
-      .leftJoinAndSelect('contact.invited_user', 'invited_user')
+      .leftJoinAndSelect('contact.invited_user', 'invited_user', 'invited_user.is_deleted=false')
       .where('contact.seller_id = :sellerId', { sellerId })
       .andWhere('contact.status = :status', { status: ContactStatus.ACCEPTED })
       .select([
@@ -144,6 +137,15 @@ export class ContactRepository extends BaseRepository<Contact> {
       where: {
         seller_id,
         invited_user_id,
+      },
+    });
+  }
+
+  async findOneNotDeleted(id: bigint) {
+    return this.repository.findOne({
+      where: {
+        id,
+        invited_user: { is_deleted: false },
       },
     });
   }

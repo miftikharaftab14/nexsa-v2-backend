@@ -145,6 +145,23 @@ export class UserController {
     };
   }
 
+  @Patch('make-active')
+  @ApiOperation({ summary: Descriptions.UPDATE_USER_SUMMARY })
+  @ApiResponse(_200_users)
+  @ApiResponse(_404_users)
+  @ApiResponse(_400_users)
+  @ApiResponse(_401_users)
+  @ApiResponse(_403_users)
+  async makeActive(@CurrentUser() currentUser: CurrentUserType): Promise<CustomApiResponse<any>> {
+    const user = await this.userService.makeActive(currentUser.userId);
+    return {
+      success: true,
+      message: Messages.USER_UPDATED,
+      status: HttpStatus.OK,
+      data: user,
+    };
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: Descriptions.UPDATE_USER_SUMMARY })
   @ApiResponse(_200_users)
@@ -167,6 +184,8 @@ export class UserController {
     )
     file: Express.Multer.File,
   ): Promise<CustomApiResponse<User>> {
+    console.log({ updateUserDto });
+
     const user = await this.userService.update(+id, { ...updateUserDto, image: file });
     if (!user) {
       throw new NotFoundException(Messages.USER_NOT_FOUND);

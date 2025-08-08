@@ -110,7 +110,6 @@ export class ContactService implements IContactUpdate {
     try {
       this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT);
       const contacts = await this.contactRepo.findAllSelelrsByCustomer(customerId);
-      console.log({ contacts });
 
       this.logger.log(LogMessages.CONTACT_FETCH_SUCCESS);
       const enrichedContacts = await Promise.all(
@@ -142,7 +141,7 @@ export class ContactService implements IContactUpdate {
   async findOne(id: number): Promise<ApiResponse<Contact>> {
     try {
       this.logger.debug(LogMessages.CONTACT_FETCH_ATTEMPT, id);
-      const contact = await this.contactRepo.findOneById(id);
+      const contact = await this.contactRepo.findOneNotDeleted(BigInt(id));
       if (!contact) {
         throw new BusinessException(Messages.CONTACT_NOT_FOUND, 'CONTACT_NOT_FOUND');
       }

@@ -243,11 +243,18 @@ export class ChatService {
     if (currentUser.is_deleted) {
       throw new BadRequestException(`Record with ID ${userId} is not available due to deletion`);
     }
-    const contacts = await this.contactRepository.find({
-      where: [{ seller_id: userId }, { invited_user_id: userId }],
-      relations: ['invited_user', 'seller'],
-      order: { updated_at: 'DESC' },
-    });
+    const contacts = await this.contactRepository
+      .createQueryBuilder('contact')
+      .leftJoinAndSelect('contact.seller', 'seller')
+      .leftJoinAndSelect('contact.invited_user', 'invited_user')
+      .where(
+        '(contact.seller_id = :userId AND seller.is_deleted = false AND invited_user.is_deleted = false) ' +
+          'OR (contact.invited_user_id = :userId AND invited_user.is_deleted = false AND seller.is_deleted = false)',
+        { userId },
+      )
+      .orderBy('contact.updated_at', 'DESC')
+      .getMany();
+    console.log({ contacts: JSON.stringify(contacts) });
 
     const result: {
       unreadMessagesCount: number;
@@ -328,8 +335,15 @@ export class ChatService {
     }
     const [contacts, broadcastsRaw] = await Promise.all([
       this.contactRepository.find({
-        where: [{ seller_id: userId }, { invited_user_id: userId }],
-        relations: ['invited_user'],
+        where: [
+          { seller_id: userId, seller: { is_deleted: false }, invited_user: { is_deleted: false } },
+          {
+            invited_user_id: userId,
+            invited_user: { is_deleted: false },
+            seller: { is_deleted: false },
+          },
+        ],
+        relations: ['invited_user', 'seller'],
         order: { updated_at: 'DESC' },
       }),
       this.dataSource

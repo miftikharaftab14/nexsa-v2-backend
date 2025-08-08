@@ -28,7 +28,9 @@ export class UserRepository extends BaseRepository<User> {
 
     return user;
   }
-
+  async makeActive(userId: number | string) {
+    return this.repository.update(userId, { is_deleted: false });
+  }
   async removePreference(userId: number, preference: string): Promise<User> {
     const user = await this.repository.findOne({ where: { id: userId as unknown as bigint } });
     if (!user) {
@@ -73,5 +75,13 @@ export class UserRepository extends BaseRepository<User> {
   }
   async softDelete(id) {
     return this.repository.update(id, { is_deleted: true });
+  }
+  async findOneById(id: bigint | number) {
+    return this.repository.findOne({
+      where: {
+        id: BigInt(id),
+        is_deleted: false,
+      },
+    });
   }
 }

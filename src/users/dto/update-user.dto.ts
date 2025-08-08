@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, Length, IsEnum, IsString, IsUrl } from 'class-validator';
+import { IsEmail, IsOptional, Length, IsEnum, IsString, IsUrl, IsBoolean } from 'class-validator';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { ApiProperty } from '@nestjs/swagger';
 import { Examples } from 'src/common/enums/examples.enum';
@@ -99,4 +99,8 @@ export class UpdateUserDto {
     return value;
   })
   preferences?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  is_deleted?: boolean;
 }
