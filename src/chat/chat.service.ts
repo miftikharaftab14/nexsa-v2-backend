@@ -9,7 +9,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, FindOptionsWhere, MoreThan, Repository, UpdateResult } from 'typeorm';
+import { DataSource, FindOptionsWhere, IsNull, MoreThan, Repository, UpdateResult } from 'typeorm';
 import { Message, MessageType } from './entities/message.entity';
 import { User } from '../users/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
@@ -336,10 +336,24 @@ export class ChatService {
     const [contacts, broadcastsRaw] = await Promise.all([
       this.contactRepository.find({
         where: [
-          { seller_id: userId, seller: { is_deleted: false }, invited_user: { is_deleted: false } },
+          {
+            seller_id: userId,
+            seller: { is_deleted: false },
+            invited_user: { is_deleted: false },
+          },
+          {
+            seller_id: userId,
+            seller: { is_deleted: false },
+            invited_user: IsNull(), // invited_user is null
+          },
           {
             invited_user_id: userId,
             invited_user: { is_deleted: false },
+            seller: { is_deleted: false },
+          },
+          {
+            invited_user_id: userId,
+            invited_user: IsNull(), // invited_user is null
             seller: { is_deleted: false },
           },
         ],

@@ -1,7 +1,7 @@
 // src/contacts/repositories/contact.repository.ts
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { Contact } from '../entities/contact.entity';
 import { BaseRepository } from '../../common/repositories/base.repository';
 import { ContactStatus } from 'src/common/enums/contact-status.enum';
@@ -27,7 +27,7 @@ export class ContactRepository extends BaseRepository<Contact> {
   async findAllSelelrsByCustomer(customerId: bigint): Promise<SellerInfoType[]> {
     return this.repository
       .createQueryBuilder('contact')
-      .innerJoin('users', 'seller', 'seller.id = contact.seller_id AND seller.is_deleted= false')
+      .innerJoin('users', 'seller', 'seller.id = contact.seller_id AND seller.is_deleted= false ')
       .leftJoin(
         qb =>
           qb
@@ -66,11 +66,14 @@ export class ContactRepository extends BaseRepository<Contact> {
   }
 
   async findBySellerId(sellerId: number | bigint): Promise<Contact[]> {
-    return this.repository.find({
-      where: { seller_id: BigInt(sellerId), invited_user: { is_deleted: false } },
-      relations: ['seller'],
-      order: { created_at: 'DESC' },
-    });
+    return this.repository
+      .createQueryBuilder('contact')
+      .leftJoinAndSelect('contact.seller', 'seller')
+      .leftJoinAndSelect('contact.invited_user', 'invited_user')
+      .where('contact.seller_id = :sellerId', { sellerId })
+      .andWhere('(invited_user.is_deleted = false OR invited_user.id IS NULL)')
+      .orderBy('contact.created_at', 'DESC')
+      .getMany();
   }
   async findByCustomerId(CustomerId: number): Promise<Contact[]> {
     return this.repository.find({
@@ -99,7 +102,11 @@ export class ContactRepository extends BaseRepository<Contact> {
     // Fetch contacts with invited user (including profile_picture)
     const contacts = await this.repository
       .createQueryBuilder('contact')
-      .leftJoinAndSelect('contact.invited_user', 'invited_user', 'invited_user.is_deleted=false')
+      .leftJoinAndSelect(
+        'contact.invited_user',
+        'invited_user',
+        'invited_user.is_deleted=false OR invited_user.id IS NULL ',
+      )
       .where('contact.seller_id = :sellerId', { sellerId })
       .andWhere('contact.status = :status', { status: ContactStatus.ACCEPTED })
       .select([
@@ -143,10 +150,10 @@ export class ContactRepository extends BaseRepository<Contact> {
 
   async findOneNotDeleted(id: bigint) {
     return this.repository.findOne({
-      where: {
-        id,
-        invited_user: { is_deleted: false },
-      },
+      where: [
+        { id, invited_user: { is_deleted: false } },
+        { id, invited_user: IsNull() },
+      ],
     });
   }
 }
