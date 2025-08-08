@@ -56,6 +56,7 @@ export type ChatResult = {
   messageType?: MessageType;
   sender?: User;
   message: Message | null;
+  is_deleted: boolean;
   mediaCont?: {
     mediaUrl: string | null;
     thumbnailUrl: string | null;

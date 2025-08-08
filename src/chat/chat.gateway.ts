@@ -304,6 +304,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       lastMessageAt: message.createdAt?.toISOString(),
       read: false,
       message,
+      is_deleted: sender.is_deleted,
       mediaCont: {
         mediaUrl: mediaUrl,
         thumbnailUrl: '',

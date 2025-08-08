@@ -244,10 +244,7 @@ export class ChatService {
       throw new BadRequestException(`Record with ID ${userId} is not available due to deletion`);
     }
     const contacts = await this.contactRepository.find({
-      where: [
-        { seller_id: userId, seller: { is_deleted: false } },
-        { invited_user_id: userId, seller: { is_deleted: false } },
-      ],
+      where: [{ seller_id: userId }, { invited_user_id: userId }],
       relations: ['invited_user', 'seller'],
       order: { updated_at: 'DESC' },
     });
@@ -263,6 +260,7 @@ export class ChatService {
       messageType?: MessageType;
       read: boolean;
       message: Message | null;
+      is_deleted: boolean;
     }[] = [];
 
     for (const contact of contacts) {
@@ -313,6 +311,7 @@ export class ChatService {
         lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
         messageType: lastMessage?.messageType,
         message: lastMessage,
+        is_deleted: contact.seller.is_deleted,
       });
     }
 
@@ -329,10 +328,7 @@ export class ChatService {
     }
     const [contacts, broadcastsRaw] = await Promise.all([
       this.contactRepository.find({
-        where: [
-          { seller_id: userId },
-          { invited_user_id: userId, invited_user: { is_deleted: false } },
-        ],
+        where: [{ seller_id: userId }, { invited_user_id: userId }],
         relations: ['invited_user'],
         order: { updated_at: 'DESC' },
       }),
@@ -344,7 +340,10 @@ export class ChatService {
         .addSelect('broadcast.created_at', 'broadcast_created_at')
         .addSelect('broadcast.updated_at', 'broadcast_updated_at')
         .addSelect('broadcast.deleted_at', 'broadcast_deleted_at')
-        .addSelect('COUNT(DISTINCT recipient.customer_id)', 'total_recipients_count')
+        .addSelect(
+          `COUNT(DISTINCT CASE WHEN customer.is_deleted = false THEN recipient.customer_id END)`,
+          'total_recipients_count',
+        )
         .addSelect(
           `COALESCE(
           json_agg(
@@ -361,7 +360,7 @@ export class ChatService {
         )
         .from(Broadcast, 'broadcast')
         .leftJoin('broadcast.recipients', 'recipient')
-        .leftJoin('recipient.customer', 'customer')
+        .leftJoin('recipient.customer', 'customer', 'customer.is_deleted = false')
         .groupBy('broadcast.id')
         .where('broadcast.seller_id = :sellerId', { sellerId: userId.toString() })
         .orderBy('broadcast.id', 'DESC')
@@ -423,6 +422,7 @@ export class ChatService {
         read: lastMessage?.read ?? false,
         lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
         type: ChatType.CHAT,
+        is_deleted: contact.invited_user.is_deleted,
       });
     }
 
