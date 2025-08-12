@@ -120,6 +120,19 @@ export class ChatController {
       data: result,
     };
   }
+  @Get('broadcast-recipient/:brodcastId')
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Get a broadcasts' })
+  @ApiResponse({ status: 200, description: 'List of broadcasts' })
+  async getBroadcastsRecipientById(@Param('brodcastId') brodcastId: number) {
+    const result = await this.chatService.getBroadcastsRecipientById(brodcastId);
+    return {
+      success: true,
+      message: Messages.BRODCAST_FETCHED,
+      status: HttpStatus.OK,
+      data: result,
+    };
+  }
   @Get('broadcast/:brodcastId')
   @Roles(UserRole.SELLER)
   @ApiOperation({ summary: 'Get a broadcasts' })

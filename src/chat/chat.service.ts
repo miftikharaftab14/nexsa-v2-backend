@@ -559,6 +559,41 @@ export class ChatService {
       }),
     );
   }
+  async getBroadcastsRecipientById(broadcastId: number) {
+    const broadcast = await this.broadcastRepository.findOne({
+      where: { id: broadcastId },
+    });
+
+    if (!broadcast) {
+      throw new NotFoundException('Broadcast not available');
+    }
+
+    const result = await this.broadcastRecipientRepository
+      .createQueryBuilder('recipient')
+      .leftJoinAndSelect('recipient.customer', 'customer')
+      .leftJoin(
+        Contact,
+        'contact',
+        'contact.seller = :sellerId AND contact.phone_number = customer.phone_number',
+        { sellerId: broadcast.sellerId },
+      )
+      .where('recipient.broadcastId = :broadcastId', { broadcastId })
+      .andWhere('customer.is_deleted = false')
+      .select([
+        'customer.id as id',
+        'customer.phone_number as phone_number',
+        'customer.profile_picture as profile_picture',
+        'contact.id',
+        'contact.full_name as name',
+      ])
+      .getRawMany(); // <-- use getRawMany since it's not an entity relation
+    return Promise.all(
+      result.map(async obj => ({
+        ...obj,
+        profile_picture: await this.fileService.getPresignedUrl(obj.profile_picture),
+      })),
+    );
+  }
 
   async getBroadcastsById(broadcastId: number) {
     // Fetch the broadcast with recipients and their user info
