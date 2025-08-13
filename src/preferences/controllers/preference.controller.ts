@@ -1,14 +1,17 @@
-import { Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PreferenceService } from '../services/preference.service';
 import { Preference } from '../../common/entities/preference.entity';
 import { ApiResponse as CustomApiResponse } from '../../common/interfaces/api-response.interface';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { CurrentUserType } from 'src/common/types/current-user.interface';
 import { UpdatePreferencesDto } from '../entities/update-preferences.dto';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @ApiTags('Preferences')
 @Controller('preferences')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
 export class PreferenceController {
   constructor(private readonly preferenceService: PreferenceService) {}
 
