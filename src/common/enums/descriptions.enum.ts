@@ -19,6 +19,7 @@ export enum Descriptions {
   DEVICE_TOKEN = 'Unique device token used for push notifications (provided by Firebase)',
   DEVICE_TYPE = 'Type of device (e.g., Android, iOS, Web)',
   DEVICE_OS = 'Operating system of the device (e.g., Android 14, iOS 17)',
+  LINK_NAME = 'Link Name ',
 
   OTP_DESC = 'One-time password (6 digits)',
   PASSWORD_DESC = 'Password of the user',

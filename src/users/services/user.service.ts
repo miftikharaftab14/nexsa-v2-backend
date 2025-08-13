@@ -120,8 +120,6 @@ export class UserService {
    * @throws BusinessException if user not found or update fails
    */
   async update(id: number, updateUserDto: UpdateUserDto): Promise<ExtendedUser> {
-    console.log({ updateUserDto });
-
     const queryRunner = this.dataSource.createQueryRunner();
     const imageDetails: {
       fileId: number;
@@ -172,6 +170,7 @@ export class UserService {
         ...(updateUserDto.preferences && { preferences: preferences }),
         ...(updateUserDto.link && { link: updateUserDto.link }),
         ...(updateUserDto.is_deleted && { is_deleted: updateUserDto.is_deleted }),
+        ...(updateUserDto.link_name && { link_name: updateUserDto.link_name }),
       });
 
       await queryRunner.commitTransaction();

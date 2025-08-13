@@ -9,10 +9,10 @@ export class PreferenceService {
 
   constructor(private readonly preferenceRepository: PreferenceRepository) {}
 
-  async findAll(): Promise<Preference[]> {
+  async findAll(userId: bigint): Promise<Preference[]> {
     try {
       this.logger.debug(LogMessages.PREFERENCE_FETCH_ATTEMPT);
-      const preferences = await this.preferenceRepository.findAllPreferences();
+      const preferences = await this.preferenceRepository.findAllPreferences(userId);
       this.logger.log(
         LogMessages.PREFERENCE_FETCH_SUCCESS,
         `Found ${preferences.length} preferences`,
@@ -58,6 +58,20 @@ export class PreferenceService {
         this.logger.log(LogMessages.PREFERENCE_FETCH_SUCCESS, `name: ${name}`);
       }
       return preference;
+    } catch (error) {
+      this.logger.error(
+        LogMessages.PREFERENCE_FETCH_FAILED,
+        error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+  async addNew(name: string, userId: bigint): Promise<Preference | null> {
+    try {
+      this.logger.debug(LogMessages.PREFERENCE_FETCH_ATTEMPT, `name: ${name}`);
+
+      return this.preferenceRepository.addNew(name, userId);
     } catch (error) {
       this.logger.error(
         LogMessages.PREFERENCE_FETCH_FAILED,

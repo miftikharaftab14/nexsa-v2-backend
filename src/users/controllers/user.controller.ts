@@ -184,8 +184,6 @@ export class UserController {
     )
     file: Express.Multer.File,
   ): Promise<CustomApiResponse<User>> {
-    console.log({ updateUserDto });
-
     const user = await this.userService.update(+id, { ...updateUserDto, image: file });
     if (!user) {
       throw new NotFoundException(Messages.USER_NOT_FOUND);

@@ -29,6 +29,14 @@ export class UpdateUserDto {
   email?: string;
 
   @ApiProperty({
+    description: Descriptions.LINK_NAME,
+    example: Examples.USERNAME,
+  })
+  @IsOptional()
+  @IsString()
+  link_name?: string;
+
+  @ApiProperty({
     description: Descriptions.PHONE_DESC,
     example: Examples.PHONE,
     required: false,

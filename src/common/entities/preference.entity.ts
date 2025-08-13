@@ -19,4 +19,7 @@ export class Preference {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  @Column({ name: 'user_id', type: 'bigint', nullable: true })
+  userId?: bigint | null;
 }

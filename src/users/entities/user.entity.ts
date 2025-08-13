@@ -64,6 +64,9 @@ export class User {
   @OneToOne(() => Gallery, gallery => gallery.user)
   gallery: Gallery;
 
+  @Column({ name: 'link_name', type: 'text' })
+  link_name: string;
+
   @CreateDateColumn()
   created_at: Date;
 
