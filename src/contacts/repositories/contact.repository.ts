@@ -55,6 +55,8 @@ export class ContactRepository extends BaseRepository<Contact> {
         'seller.id AS user_id',
         'seller.username AS username',
         'seller.email AS email',
+        'seller.link_name AS link_name',
+        'seller.link AS link',
         'contact.id AS "contactId"',
         'seller.profile_picture AS profile_picture',
         'COALESCE(gallery_count.total_galleries_count, 0) AS total_galleries_count',
