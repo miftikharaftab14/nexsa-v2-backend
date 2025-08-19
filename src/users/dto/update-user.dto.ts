@@ -111,4 +111,12 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   is_deleted?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  first_gallery_open?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  first_message_send?: boolean;
 }

@@ -218,6 +218,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         `${this.redisPrefix}:user_socket:${receiverId}`,
       );
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
+      const broadcastReply = await this.messageRepository.findOne({
+        where: {
+          contactId: contact.id,
+        },
+        order: { createdAt: 'DESC' },
+      });
+      console.log({ broadcastReply });
 
       // Emit each message to receiver and sender
       for (const message of messages) {
@@ -232,7 +239,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         );
 
         if (receiverSocketId) {
-          this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
+          this.server.to(receiverSocketId).emit('receive_message', {
+            ...chatMessageResult,
+            broadcastReply:
+              broadcastReply?.broadcastId && sender.id === contact.invited_user_id ? true : false,
+          });
         }
 
         if (senderSocketId && senderSocketId !== receiverSocketId) {
@@ -251,6 +262,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
               mediaUrl,
               thumbnailUrl: '',
             },
+            broadcastReply:
+              broadcastReply?.broadcastId && sender.id === contact.invited_user_id ? true : false,
           });
         }
       }

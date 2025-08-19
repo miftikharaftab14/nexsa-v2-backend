@@ -12,6 +12,7 @@ import { BusinessException } from 'src/common/exceptions/business.exception';
 import { ConfigService } from '@nestjs/config';
 import { ExtendedUser } from '../interfaces/user.interface';
 import { UserRole } from 'src/common/enums/user-role.enum';
+import { UpdateUserFlagsDto } from '../dto/UpdateUserFlags.dto';
 
 /**
  * Service responsible for managing user-related operations including CRUD operations,
@@ -171,6 +172,12 @@ export class UserService {
         ...(updateUserDto.link && { link: updateUserDto.link }),
         ...(updateUserDto.is_deleted && { is_deleted: updateUserDto.is_deleted }),
         ...(updateUserDto.link_name && { link_name: updateUserDto.link_name }),
+        ...(updateUserDto.first_message_send && {
+          first_message_send: updateUserDto.first_message_send,
+        }),
+        ...(updateUserDto.first_gallery_open && {
+          first_gallery_open: updateUserDto.first_gallery_open,
+        }),
       });
 
       await queryRunner.commitTransaction();
@@ -407,5 +414,8 @@ export class UserService {
   }
   makeActive(userId: bigint) {
     return this.userRepo.makeActive(userId.toString());
+  }
+  userFlagsUpdate(userId: bigint, updateUserFlagsDto: UpdateUserFlagsDto) {
+    return this.userRepo.userFlagsUpdate(userId.toString(), updateUserFlagsDto);
   }
 }

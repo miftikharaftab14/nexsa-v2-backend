@@ -55,6 +55,12 @@ export class User {
   @Column({ default: false })
   is_deleted: boolean;
 
+  @Column({ default: false })
+  first_message_send: boolean;
+
+  @Column({ default: false })
+  first_gallery_open: boolean;
+
   @OneToMany(() => UserDeviceToken, token => token.user)
   deviceTokens: UserDeviceToken[];
 

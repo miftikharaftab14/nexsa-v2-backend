@@ -50,11 +50,13 @@ import {
 } from '../documentaion/api.response';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { CurrentUserType } from 'src/common/types/current-user.interface';
+import { UpdateUserFlagsDto } from '../dto/UpdateUserFlags.dto';
 
 @ApiTags('Users')
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
@@ -154,6 +156,25 @@ export class UserController {
   @ApiResponse(_403_users)
   async makeActive(@CurrentUser() currentUser: CurrentUserType): Promise<CustomApiResponse<any>> {
     const user = await this.userService.makeActive(currentUser.userId);
+    return {
+      success: true,
+      message: Messages.USER_UPDATED,
+      status: HttpStatus.OK,
+      data: user,
+    };
+  }
+  @Patch('user-flags')
+  @ApiOperation({ summary: Descriptions.UPDATE_USER_SUMMARY })
+  @ApiResponse(_200_users)
+  @ApiResponse(_404_users)
+  @ApiResponse(_400_users)
+  @ApiResponse(_401_users)
+  @ApiResponse(_403_users)
+  async userFlagsUpdate(
+    @CurrentUser() currentUser: CurrentUserType,
+    @Body() updateUserFlagsDto: UpdateUserFlagsDto,
+  ): Promise<CustomApiResponse<any>> {
+    const user = await this.userService.userFlagsUpdate(currentUser.userId, updateUserFlagsDto);
     return {
       success: true,
       message: Messages.USER_UPDATED,
