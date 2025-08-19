@@ -90,13 +90,14 @@ export class AuthService {
     invitations: Invitation[] | null;
     contacts: Contact[] | null;
     token: string | null;
+    new_created_user: boolean;
   }> {
     try {
       this.logger.debug(LogMessages.AUTH_LOGIN_ATTEMPT, dto.phone_number);
       let user = await this.userService.findByPhoneAndRole(dto.phone_number, dto.role);
       let invitaions: Invitation[] | null = null;
       let contacts: Contact[] | null = null;
-
+      let new_created_user = false;
       if (dto.role === UserRole.CUSTOMER) {
         if (!dto.deepLinktoken)
           invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number);
@@ -108,6 +109,7 @@ export class AuthService {
               phone_number: dto.phone_number,
               role: UserRole.CUSTOMER,
             });
+            new_created_user = true;
             this.logger.log(
               LogMessages.AUTH_LOGIN_SUCCESS,
               `New user created - ${user.phone_number}`,
@@ -136,6 +138,7 @@ export class AuthService {
           invitations: invitaions,
           contacts: contacts,
           token: token,
+          new_created_user,
         };
       } else {
         this.logger.warn(
