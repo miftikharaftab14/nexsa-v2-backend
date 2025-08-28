@@ -241,7 +241,7 @@ export class InvitationService implements IInvitationService {
       this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, phoneNumber);
 
       const invitation = await this.invitationRepo.find({
-        where: { contact: { phone_number: phoneNumber } },
+        where: { contact: { phone_number: phoneNumber }, status: InvitationStatus.PENDING },
         relations: ['contact', 'contact.seller'],
       });
 
