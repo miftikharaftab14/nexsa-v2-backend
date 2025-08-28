@@ -11,12 +11,14 @@ import { EmailInvitationStrategy } from './strategies/ email-invitation.strategy
 import { EmailModule } from 'src/common/modules/email.module';
 import { ConfigModule } from '@nestjs/config';
 import { TwilioMessagingService } from 'src/common/services/twilio-messaging.service';
+import { FilesModule } from 'src/files/files.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Invitation, Contact, OtpVerification]),
     ConfigModule,
     EmailModule,
+    FilesModule,
   ],
   controllers: [InvitationController],
   providers: [
@@ -42,4 +44,4 @@ import { TwilioMessagingService } from 'src/common/services/twilio-messaging.ser
   ],
   exports: [InjectionToken.INVITATION_SERVICE, InvitationService],
 })
-export class InvitationsModule { }
+export class InvitationsModule {}

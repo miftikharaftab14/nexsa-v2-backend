@@ -13,6 +13,7 @@ import { Invitation } from '../entities/invitation.entity';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { ContactStatus } from 'src/common/enums/contact-status.enum';
 import { IInvitationStrategy } from '../interfaces/invitation-strategy.interface';
+import { FileService } from 'src/files/services/file.service';
 
 @Injectable()
 export class InvitationService implements IInvitationService {
@@ -26,6 +27,8 @@ export class InvitationService implements IInvitationService {
     @Inject(InjectionToken.INVITATION_STRATEGIES)
     private readonly strategies: IInvitationStrategy[],
     private readonly configService: ConfigService,
+    @Inject(InjectionToken.FILE_SERVICE)
+    private readonly fileService: FileService,
   ) {}
   private selectStrategy(contact: Contact): IInvitationStrategy {
     // 1. First check if contact has phone number
@@ -238,7 +241,7 @@ export class InvitationService implements IInvitationService {
       this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, phoneNumber);
 
       const invitation = await this.invitationRepo.find({
-        where: { contact: { phone_number: phoneNumber }, status: InvitationStatus.PENDING },
+        where: { contact: { phone_number: phoneNumber } },
         relations: ['contact', 'contact.seller'],
       });
 
@@ -247,7 +250,27 @@ export class InvitationService implements IInvitationService {
       }
 
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, phoneNumber);
-      return invitation;
+      return Promise.all(
+        (invitation || []).map(async invitation => {
+          const { contact } = invitation;
+          const { seller } = contact || {};
+
+          const profilePictureUrl = seller?.profile_picture
+            ? await this.fileService.getPresignedUrl(Number(seller.profile_picture))
+            : null;
+
+          return {
+            ...invitation,
+            contact: {
+              ...contact,
+              seller: {
+                ...seller,
+                profile_picture: profilePictureUrl || '',
+              },
+            },
+          };
+        }),
+      );
     } catch (error) {
       this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
       throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
