@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account Deletion - Nexsa</title>
+    <meta name="description" content="Learn how to delete your Nexsa account. Follow our simple step-by-step guide to permanently remove your account and data." />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #9052fb, #fa575c);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #9052fb, #fa575c);
+        color: white;
+        padding: 40px 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 40px 30px;
+      }
+
+      .warning-box {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 30px;
+        border-left: 4px solid #f39c12;
+      }
+
+      .warning-box h3 {
+        color: #856404;
+        margin-bottom: 10px;
+        font-size: 1.2rem;
+      }
+
+      .warning-box p {
+        color: #856404;
+        margin: 0;
+      }
+
+      .steps-container {
+        margin: 30px 0;
+      }
+
+      .step {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 25px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        border-left: 4px solid #9052fb;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .step:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+      }
+
+      .step-number {
+        background: #9052fb;
+        color: white;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 1.1rem;
+        margin-right: 20px;
+        flex-shrink: 0;
+      }
+
+      .step-content h3 {
+        color: #333;
+        margin-bottom: 8px;
+        font-size: 1.3rem;
+      }
+
+      .step-content p {
+        color: #666;
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .important-info {
+        background: #e3f2fd;
+        border: 1px solid #bbdefb;
+        border-radius: 12px;
+        padding: 25px;
+        margin: 30px 0;
+        border-left: 4px solid #2196f3;
+      }
+
+      .important-info h3 {
+        color: #1565c0;
+        margin-bottom: 15px;
+        font-size: 1.3rem;
+      }
+
+      .important-info ul {
+        color: #1565c0;
+        padding-left: 20px;
+      }
+
+      .important-info li {
+        margin-bottom: 8px;
+      }
+
+      .contact-section {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 25px;
+        margin-top: 30px;
+        text-align: center;
+      }
+
+      .contact-section h3 {
+        color: #333;
+        margin-bottom: 15px;
+        font-size: 1.3rem;
+      }
+
+      .contact-section p {
+        color: #666;
+        margin-bottom: 15px;
+      }
+
+      .contact-button {
+        display: inline-block;
+        background: #9052fb;
+        color: white;
+        padding: 12px 24px;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: background 0.3s ease, transform 0.2s ease;
+      }
+
+      .contact-button:hover {
+        background: #7c3aed;
+        transform: translateY(-2px);
+      }
+
+      .footer {
+        background: #f8f9fa;
+        padding: 20px 30px;
+        text-align: center;
+        color: #666;
+        border-top: 1px solid #e9ecef;
+      }
+
+      .footer p {
+        margin: 0;
+        font-size: 0.9rem;
+      }
+
+      .app-badges {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-top: 20px;
+      }
+
+      .app-badges a img {
+        height: 50px;
+        transition: transform 0.3s ease;
+      }
+
+      .app-badges a img:hover {
+        transform: scale(1.05);
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          margin: 10px;
+          border-radius: 15px;
+        }
+
+        .header {
+          padding: 30px 20px;
+        }
+
+        .header h1 {
+          font-size: 2rem;
+        }
+
+        .content {
+          padding: 30px 20px;
+        }
+
+        .step {
+          flex-direction: column;
+          text-align: center;
+        }
+
+        .step-number {
+          margin: 0 auto 15px auto;
+        }
+
+        .app-badges {
+          flex-direction: column;
+          align-items: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Account Deletion</h1>
+        <p>How to permanently delete your Nexsa account</p>
+      </div>
+
+      <div class="content">
+        <div class="warning-box">
+          <h3>⚠️ Important Notice</h3>
+          <p>Deleting your account is permanent and cannot be undone. All your data, including messages, contacts, and preferences, will be permanently removed from our servers.</p>
+        </div>
+
+        <div class="steps-container">
+          <h2 style="margin-bottom: 25px; color: #333; font-size: 1.8rem;">Step-by-Step Guide</h2>
+          
+          <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <h3>Login to Nexsa</h3>
+              <p>Open the Nexsa app on your device and log in using your registered email address and password.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <h3>Navigate to Settings</h3>
+              <p>Once logged in, tap on the "Settings" tab located in the bottom navigation bar or main menu of the app.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <h3>Find Delete Account Option</h3>
+              <p>Scroll down in the Settings menu until you find the "Delete Account" button. This option is typically located at the bottom of the settings list.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <h3>Confirm Deletion</h3>
+              <p>Tap the "Delete Account" button. A confirmation modal will appear asking you to confirm your decision. Read the warning carefully and tap "Confirm" to permanently delete your account.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="important-info">
+          <h3>What Happens When You Delete Your Account?</h3>
+          <ul>
+            <li>All your personal data will be permanently removed from our servers</li>
+            <li>Your messages and chat history will be deleted</li>
+            <li>Your contacts and connections will be removed</li>
+            <li>Your profile information and preferences will be erased</li>
+            <li>You will no longer receive notifications from Nexsa</li>
+            <li>This action cannot be reversed</li>
+          </ul>
+        </div>
+
+        <div class="contact-section">
+          <h3>Need Help?</h3>
+          <p>If you're having trouble deleting your account or have questions about the process, our support team is here to help.</p>
+          <a href="mailto:support@nexsa.com" class="contact-button">Contact Support</a>
+        </div>
+
+        <div class="app-badges">
+          <a href="https://play.google.com/store" target="_blank">
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg"
+              alt="Get it on Google Play"
+            />
+          </a>
+          <a href="https://www.apple.com/app-store/" target="_blank">
+            <img
+              src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
+              alt="Download on the App Store"
+            />
+          </a>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>&copy; 2024 Nexsa. All rights reserved. | <a href="/privacy" style="color: #9052fb;">Privacy Policy</a> | <a href="/terms" style="color: #9052fb;">Terms of Service</a></p>
+      </div>
+    </div>
+  </body>
+</html>
