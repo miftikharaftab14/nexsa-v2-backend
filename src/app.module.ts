@@ -21,10 +21,7 @@ import { AdminModule } from './admin/admin.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      envFilePath: [
-        '.env',
-        `.env.${process.env.NODE_ENV || 'development'}`,
-      ],
+      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
       isGlobal: true,
       load: [dbConfiguration],
       validate,
