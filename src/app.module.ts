@@ -16,11 +16,15 @@ import { GalleryImagesModule } from './gallery-image/gallery-images.module';
 import { ChatModule } from './chat/chat.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { GalleryModule } from './galleries/gallery.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
+      envFilePath: [
+        '.env',
+        `.env.${process.env.NODE_ENV || 'development'}`,
+      ],
       isGlobal: true,
       load: [dbConfiguration],
       validate,
@@ -36,6 +40,7 @@ import { GalleryModule } from './galleries/gallery.module';
     GalleryImagesModule,
     PreferencesModule,
     GalleryModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

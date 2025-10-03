@@ -28,9 +28,16 @@ export class GalleryImageRepository extends BaseRepository<GalleryImage> {
         'like.gallery_image_id = gi.id AND like.customer_id = :customerId',
         { customerId },
       )
+      .leftJoin(
+        'image_reports',
+        'report',
+        'report.gallery_image_id = gi.id AND report.customer_id = :customerId',
+        { customerId },
+      )
       .where('gi.user_id = :userId', { userId })
       .andWhere('gi.gallery_id = :galleryId', { galleryId })
       .andWhere('gi.is_deleted = false')
+      .andWhere('report.id IS NULL') // Exclude reported images
       .select([
         'gi.id AS id',
         'gi.media_file_id AS "mediaFileId"',

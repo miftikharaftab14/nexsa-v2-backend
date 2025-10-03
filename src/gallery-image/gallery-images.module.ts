@@ -9,6 +9,8 @@ import { UserModule } from 'src/users/user.module';
 import { GalleryImageLike } from './entities/gallery-image-like.entity';
 import { GalleryImageLikeRepository } from './repository/gallery-image-like.repository';
 import { GalleryImageLikeService } from './gallery-images-like.service';
+import { ImageReport } from './entities/image-report.entity';
+import { ImageReportRepository } from './repository/image-report.repository';
 import { UserDeviceTokenModule } from 'src/users/user-device-token.module';
 import { NotificationModule } from 'src/common/modules/Notification.module';
 import { ContactsModule } from 'src/contacts/contacts.module';
@@ -16,7 +18,7 @@ import { GalleryModule } from 'src/galleries/gallery.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([GalleryImage, GalleryImageLike]),
+    TypeOrmModule.forFeature([GalleryImage, GalleryImageLike, ImageReport]),
     GalleryModule,
     FilesModule,
     UserModule,
@@ -29,6 +31,7 @@ import { GalleryModule } from 'src/galleries/gallery.module';
     GalleryImageRepository,
     GalleryImageLikeService,
     GalleryImageLikeRepository,
+    ImageReportRepository,
   ],
   controllers: [GalleryImagesController],
   exports: [GalleryImagesService, GalleryImageLikeService],

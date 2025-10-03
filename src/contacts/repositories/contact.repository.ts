@@ -32,8 +32,9 @@ export class ContactRepository extends BaseRepository<Contact> {
         qb =>
           qb
             .select('p.user_id', 'seller_id')
-            .addSelect('COUNT(*)', 'total_gallery_image_count')
+            .addSelect('COUNT(*) FILTER (WHERE ir.id IS NULL)', 'total_gallery_image_count')
             .from('gallery_image', 'p')
+            .leftJoin('image_reports', 'ir', 'ir.gallery_image_id = p.id AND ir.customer_id = :customerId')
             .where('p.is_deleted = false')
             .groupBy('p.user_id'),
         'prod_count',
