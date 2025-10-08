@@ -29,6 +29,7 @@ import { CurrentUserType } from 'src/common/types/current-user.interface';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { GalleryImageLikeService } from './gallery-images-like.service';
 import { UpdateGalleryImageDto } from './dto/update-gallery-image.dto';
+import { ReportImageDto } from './dto/report-image.dto';
 
 @ApiTags('gallery-image') // Swagger group
 @ApiBearerAuth() // Apply JWT auth header globally
@@ -265,6 +266,31 @@ export class GalleryImagesController {
       success: true,
       message: Messages.PRODUCT_DELETED,
       status: HttpStatus.OK,
+      data: result,
+    };
+  }
+
+  /**
+   * Report a gallery image as inappropriate
+   */
+  @Post('report')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Report a gallery image as inappropriate' })
+  @ApiResponse({ status: 201, description: 'Image reported successfully' })
+  @ApiResponse({ status: 400, description: 'Image already reported by this customer' })
+  async reportImage(
+    @Body() reportImageDto: ReportImageDto,
+    @CurrentUser() currentUser: CurrentUserType,
+  ) {
+    const result = await this.galleryImagesService.reportImage(
+      reportImageDto.imageId,
+      Number(currentUser.userId),
+      reportImageDto.description,
+    );
+    return {
+      success: true,
+      message: 'Image has been reported successfully',
+      status: HttpStatus.CREATED,
       data: result,
     };
   }

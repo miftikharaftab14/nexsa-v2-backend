@@ -146,8 +146,10 @@ export class GalleryService {
               'row_num',
             )
             .from('gallery_image', 'p')
+            .leftJoin('image_reports', 'ir', 'ir.gallery_image_id = p.id AND ir.customer_id = :userId')
             .where('p.user_id = :sellerId', { sellerId })
-            .andWhere('p.is_deleted = false'),
+            .andWhere('p.is_deleted = false')
+            .andWhere('ir.id IS NULL'),
         'lp',
         'lp.gallery_id = gallery.id AND lp.row_num <= 3',
       )
@@ -156,8 +158,9 @@ export class GalleryService {
         qb =>
           qb
             .select('p.gallery_id', 'gallery_id')
-            .addSelect('COUNT(*)', 'total_gallery_image_count')
+            .addSelect('COUNT(*) FILTER (WHERE ir.id IS NULL)', 'total_gallery_image_count')
             .from('gallery_image', 'p')
+            .leftJoin('image_reports', 'ir', 'ir.gallery_image_id = p.id AND ir.customer_id = :userId')
             .where('p.user_id = :sellerId', { sellerId })
             .andWhere('p.is_deleted = false')
             .groupBy('p.gallery_id'),

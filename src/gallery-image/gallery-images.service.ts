@@ -18,6 +18,9 @@ import { NotificationService } from '../common/services/notification.service';
 import { ContactService } from '../contacts/services/contact.service';
 import { GalleryService } from 'src/galleries/gallery.service';
 import { Gallery } from 'src/galleries/entities/gallery.entity';
+import { ImageReportRepository } from './repository/image-report.repository';
+import { ConflictException } from '@nestjs/common';
+import { ImageReport } from './entities/image-report.entity';
 
 @Injectable()
 export class GalleryImagesService {
@@ -31,6 +34,7 @@ export class GalleryImagesService {
     private readonly userDeviceTokenService: UserDeviceTokenService,
     private readonly notificationService: NotificationService,
     private readonly contactService: ContactService,
+    private readonly imageReportRepository: ImageReportRepository,
   ) {}
 
   async convertGalleryImagePresignedUrl(galleryImage: GalleryImage) {
@@ -250,5 +254,81 @@ export class GalleryImagesService {
 
   async softDeleteByGalleryId(galleryId: number): Promise<void> {
     await this.galleryImagesRepository.softDeleteByGalleryId(galleryId);
+  }
+
+  async reportImage(imageId: number, customerId: number, description?: string): Promise<ImageReport> {
+    try {
+      this.logger.debug(`Attempting to report image ${imageId} by customer ${customerId}`);
+
+      // Check if image exists
+      const galleryImage = await this.galleryImagesRepository.findOneById(imageId);
+      if (!galleryImage) {
+        throw new NotFoundException('Gallery image not found');
+      }
+
+      // Check if already reported by this customer
+      const existingReport = await this.imageReportRepository.findByImageAndCustomer(imageId, customerId);
+      if (existingReport) {
+        throw new ConflictException('Image has already been reported by this customer');
+      }
+
+      // Create the report
+      const report = await this.imageReportRepository.create({
+        galleryImageId: imageId,
+        customerId,
+        description,
+      });
+
+      this.logger.log(`Image ${imageId} reported successfully by customer ${customerId}`);
+      return report;
+    } catch (error) {
+      this.logger.error(`Failed to report image ${imageId}`, error);
+      if (error instanceof NotFoundException || error instanceof ConflictException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to report image');
+    }
+  }
+
+  async getReportedImages(): Promise<any[]> {
+    try {
+      this.logger.debug('Attempting to get reported images');
+      const reports = await this.imageReportRepository.getReportedImagesWithCount();
+      this.logger.log('Reported images fetched successfully');
+      console.log(reports);
+      const result = await Promise.all(
+        reports.map(galleryImage => this.convertGalleryImagePresignedUrl(galleryImage)),
+      );
+      return result.filter(img => !!img && typeof img.mediaUrl === 'string');
+    } catch (error) {
+      this.logger.error('Failed to get reported images', error);
+      throw new InternalServerErrorException('Failed to get reported images');
+    }
+  }
+
+  async deleteReportedImage(imageId: number): Promise<void> {
+    try {
+      this.logger.debug(`Attempting to delete reported image ${imageId}`);
+
+      // Check if image exists
+      const galleryImage = await this.galleryImagesRepository.findOneById(imageId);
+      if (!galleryImage) {
+        throw new NotFoundException('Gallery image not found');
+      }
+
+      // Delete associated reports first
+      await this.imageReportRepository.deleteByImageId(imageId);
+
+      // Delete the image
+      await this.galleryImagesRepository.softDelete(imageId);
+
+      this.logger.log(`Reported image ${imageId} deleted successfully`);
+    } catch (error) {
+      this.logger.error(`Failed to delete reported image ${imageId}`, error);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to delete reported image');
+    }
   }
 }
