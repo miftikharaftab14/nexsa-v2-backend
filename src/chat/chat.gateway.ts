@@ -39,6 +39,7 @@ import { MoreThan, Repository } from 'typeorm';
 import { DeletedChat } from './entities/deleted-chat.entity';
 import { User } from 'src/users/entities/user.entity';
 import { Contact } from 'src/contacts/entities/contact.entity';
+import { BlocksService } from 'src/blocks/blocks.service';
 
 @WebSocketGateway({
   namespace: '/ws/chat',
@@ -66,6 +67,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly galleryImagesService: GalleryImagesService,
     @InjectRepository(DeletedChat)
     private readonly deleteChatRepository: Repository<DeletedChat>,
+    private readonly blocksService: BlocksService,
   ) {}
 
   afterInit(server: Server) {
@@ -226,6 +228,9 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       });
       console.log({ broadcastReply });
 
+      const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, user.id);
+      this.logger.log(`Blocking check: receiver ${receiverId} blocked sender ${user.id}: ${isReceiverBlocked}`);
+
       // Emit each message to receiver and sender
       for (const message of messages) {
         const mediaUrl = message.mediaKey ? mediaCont[message.mediaKey] : null;
@@ -238,12 +243,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
           mediaUrl,
         );
 
-        if (receiverSocketId) {
+        if (receiverSocketId && !isReceiverBlocked) {
           this.server.to(receiverSocketId).emit('receive_message', {
             ...chatMessageResult,
             broadcastReply:
               broadcastReply?.broadcastId && sender.id === contact.invited_user_id ? true : false,
           });
+        } else if (isReceiverBlocked) {
+          this.logger.log(`Message from ${user.id} to ${receiverId} blocked - not delivered to receiver`);
         }
 
         if (senderSocketId && senderSocketId !== receiverSocketId) {
@@ -368,6 +375,9 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             `${this.redisPrefix}:user_socket:${receiverId}`,
           );
 
+          const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, user.id);
+          this.logger.log(`Broadcast blocking check: receiver ${receiverId} blocked sender ${user.id}: ${isReceiverBlocked}`);
+
           if (uploadedMediaFiles.length > 0) {
             for (const file of uploadedMediaFiles) {
               const messageType = file.mimeType.startsWith('video/')
@@ -392,8 +402,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 message,
                 mediaCont[file.id],
               );
-              if (receiverSocketId) {
+              
+              if (receiverSocketId && !isReceiverBlocked) {
                 this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
+              } else if (isReceiverBlocked) {
+                this.logger.log(`Broadcast message from ${user.id} to ${receiverId} blocked - not delivered to receiver`);
               }
             }
           } else {
@@ -413,8 +426,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
               message,
               null,
             );
-            if (receiverSocketId) {
+            
+            if (receiverSocketId && !isReceiverBlocked) {
               this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
+            } else if (isReceiverBlocked) {
+              this.logger.log(`Broadcast message from ${user.id} to ${receiverId} blocked - not delivered to receiver`);
             }
           }
         }),
@@ -540,7 +556,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       const receiverSocketId = await this.redis.get(
         `${this.redisPrefix}:user_socket:${receiverId}`,
       );
-      if (receiverSocketId) {
+
+      const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, user.id);
+      this.logger.log(`Product chat blocking check: receiver ${receiverId} blocked sender ${user.id}: ${isReceiverBlocked}`);
+
+      if (receiverSocketId && !isReceiverBlocked) {
         const resultMessage = await this.reciverMessage(
           contact.id,
           receiverId,
@@ -550,6 +570,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
           mediaUrl,
         );
         this.server.to(receiverSocketId).emit('receive_message', resultMessage);
+      } else if (isReceiverBlocked) {
+        this.logger.log(`Product chat message from ${user.id} to ${receiverId} blocked - not delivered to receiver`);
       }
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
       if (senderSocketId)
@@ -585,6 +607,15 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     message: Message,
     mediaUrl: string | null,
   ) {
+    
+    const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, sender.id);
+    this.logger.log(`EmitMessageToUser blocking check: receiver ${receiverId} blocked sender ${sender.id}: ${isReceiverBlocked}`);
+
+    if (isReceiverBlocked) {
+      this.logger.log(`Message from ${sender.id} to ${receiverId} blocked - not delivered to receiver`);
+      return;
+    }
+
     const resultMessage = await this.reciverMessage(
       contactId,
       receiverId,

@@ -79,6 +79,20 @@ export class BlocksService {
     if (!record) return { isBlocked: false, blockedBy: null };
     return { isBlocked: true, blockedBy: String(record.blockerId) };
   }
+
+  async getLatestBlockTimestampBetween(
+    userA: number | bigint,
+    userB: number | bigint,
+  ): Promise<Date | null> {
+    const record = await this.blockRepo.findOne({
+      where: [
+        { blockerId: Number(userA), blockedId: Number(userB) },
+      ],
+      order: { createdAt: 'DESC' },
+      select: ['createdAt'],
+    });
+    return record?.createdAt ?? null;
+  }
 }
 
 

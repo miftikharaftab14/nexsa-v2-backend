@@ -15,6 +15,7 @@ import { UserDeviceTokenModule } from 'src/users/user-device-token.module';
 import { NotificationModule } from 'src/common/modules/Notification.module';
 import { ContactsModule } from 'src/contacts/contacts.module';
 import { GalleryModule } from 'src/galleries/gallery.module';
+import { BlocksModule } from 'src/blocks/blocks.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { GalleryModule } from 'src/galleries/gallery.module';
     UserDeviceTokenModule,
     NotificationModule,
     ContactsModule,
+    BlocksModule,
   ],
   providers: [
     GalleryImagesService,

@@ -21,6 +21,7 @@ import { Gallery } from 'src/galleries/entities/gallery.entity';
 import { ImageReportRepository } from './repository/image-report.repository';
 import { ConflictException } from '@nestjs/common';
 import { ImageReport } from './entities/image-report.entity';
+import { BlocksService } from 'src/blocks/blocks.service';
 
 @Injectable()
 export class GalleryImagesService {
@@ -35,7 +36,8 @@ export class GalleryImagesService {
     private readonly notificationService: NotificationService,
     private readonly contactService: ContactService,
     private readonly imageReportRepository: ImageReportRepository,
-  ) {}
+    private readonly blocksService: BlocksService,
+  ) { }
 
   async convertGalleryImagePresignedUrl(galleryImage: GalleryImage) {
     try {
@@ -77,50 +79,61 @@ export class GalleryImagesService {
       }
       const galleryImages: GalleryImage[] = dto.image
         ? await Promise.all(
-            dto.image?.map(async file => {
-              const uploadedFile = await this.fileService.storeUploadedFile(file);
-              // Create gallery image entity
-              const galleryImage = await this.galleryImagesRepository.create({
-                gallery,
-                userId: user.id,
-                mediaFileId: uploadedFile.id,
-              });
-              this.logger.log('GalleryImage created successfully', String(galleryImage.id));
-              // Send push notification to all customers of the seller
-              if (gallery.notificationsEnabled) {
-                try {
-                  const contacts = await this.contactService.findBySellerId(sellerId);
-                  const customerIds = (contacts.data || [])
-                    .map(c => c.invited_user_id)
-                    .filter(Boolean);
-                  if (customerIds.length > 0) {
-                    const tokensArr =
-                      await this.userDeviceTokenService.getTokensByUsers(customerIds);
-                    const tokens = tokensArr.flat().filter(Boolean);
-                    if (tokens.length > 0) {
-                      await this.notificationService.sendPushNotification(
-                        tokens,
-                        'New GalleryImage Available!',
-                        `A new gallery image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
-                        {
-                          productId: String(galleryImage.id),
-                          galleryId: String(gallery.id),
-                          type: 'product',
-                          screen: 'CustomerProductDetail',
-                        },
-                      );
-                    }
+          dto.image?.map(async file => {
+            const uploadedFile = await this.fileService.storeUploadedFile(file);
+            // Create gallery image entity
+            const galleryImage = await this.galleryImagesRepository.create({
+              gallery,
+              userId: user.id,
+              mediaFileId: uploadedFile.id,
+            });
+            this.logger.log('GalleryImage created successfully', String(galleryImage.id));
+            // Send push notification to all customers of the seller
+            if (gallery.notificationsEnabled) {
+              try {
+                const contacts = await this.contactService.findBySellerId(sellerId);
+                let customerIds = (contacts.data || [])
+                  .map(c => c.invited_user_id)
+                  .filter(Boolean);
+
+                // Filter out customers who blocked seller or are blocked by seller
+                const filteredIds: (bigint)[] = [];
+                for (const customerId of customerIds) {
+                  const blockedByCustomer = await this.blocksService.isBlocked(customerId, sellerId);
+                  const blockedBySeller = await this.blocksService.isBlocked(sellerId, customerId);
+                  if (!blockedByCustomer && !blockedBySeller) {
+                    filteredIds.push(customerId);
                   }
-                } catch (notifyError) {
-                  this.logger.error(
-                    'Failed to send push notification after gallery image creation',
-                    notifyError,
-                  );
                 }
+                customerIds = filteredIds as (bigint)[];
+                if (customerIds.length > 0) {
+                  const tokensArr =
+                    await this.userDeviceTokenService.getTokensByUsers(customerIds);
+                  const tokens = tokensArr.flat().filter(Boolean);
+                  if (tokens.length > 0) {
+                    await this.notificationService.sendPushNotification(
+                      tokens,
+                      'New GalleryImage Available!',
+                      `A new gallery image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
+                      {
+                        productId: String(galleryImage.id),
+                        galleryId: String(gallery.id),
+                        type: 'product',
+                        screen: 'CustomerProductDetail',
+                      },
+                    );
+                  }
+                }
+              } catch (notifyError) {
+                this.logger.error(
+                  'Failed to send push notification after gallery image creation',
+                  notifyError,
+                );
               }
-              return galleryImage;
-            }),
-          )
+            }
+            return galleryImage;
+          }),
+        )
         : [];
 
       return galleryImages;
