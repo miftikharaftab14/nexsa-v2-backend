@@ -319,6 +319,10 @@ export class ContactService implements IContactUpdate {
     const result = await this.contactRepo.findContactsBySeller(sellerId);
     return Promise.all(result.map(context => this.convertUserImagePresignedUrl(context)));
   }
+  async findSellersForCustomerUnfiltered(customerId: bigint) {
+    const rows = await this.contactRepo.findAllSelelrsByCustomerUnfiltered(customerId);
+    return rows;
+  }
   async findBySellerAndCustomer(sellerId: number, customerId: bigint) {
     return this.contactRepo.findBySellerAndCustomer(BigInt(sellerId), customerId);
   }

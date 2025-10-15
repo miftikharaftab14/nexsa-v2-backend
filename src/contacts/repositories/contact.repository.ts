@@ -28,6 +28,68 @@ export class ContactRepository extends BaseRepository<Contact> {
     return this.repository
       .createQueryBuilder('contact')
       .innerJoin('users', 'seller', 'seller.id = contact.seller_id AND seller.is_deleted= false ')
+      // Exclude pairs where either party has blocked the other
+      .andWhere(
+        `NOT EXISTS (
+            SELECT 1 FROM blocks b1
+            WHERE b1.blocker_id = contact.seller_id
+              AND b1.blocked_id = :customerId
+        )`,
+        { customerId: BigInt(customerId) },
+      )
+      .andWhere(
+        `NOT EXISTS (
+            SELECT 1 FROM blocks b2
+            WHERE b2.blocker_id = :customerId
+              AND b2.blocked_id = contact.seller_id
+        )`,
+        { customerId: BigInt(customerId) },
+      )
+      .leftJoin(
+        qb =>
+          qb
+            .select('p.user_id', 'seller_id')
+            .addSelect('COUNT(*) FILTER (WHERE ir.id IS NULL)', 'total_gallery_image_count')
+            .from('gallery_image', 'p')
+            .leftJoin('image_reports', 'ir', 'ir.gallery_image_id = p.id AND ir.customer_id = :customerId')
+            .where('p.is_deleted = false')
+            .groupBy('p.user_id'),
+        'prod_count',
+        'prod_count.seller_id = contact.seller_id',
+      )
+      .leftJoin(
+        qb =>
+          qb
+            .select('g.user_id', 'seller_id')
+            .addSelect('COUNT(*)', 'total_galleries_count')
+            .from('galleries', 'g')
+            .where('g.is_deleted = false')
+            .groupBy('g.user_id'),
+        'gallery_count',
+        'gallery_count.seller_id = contact.seller_id',
+      )
+      .select([
+        'contact.seller_id AS id',
+        'seller.id AS user_id',
+        'seller.username AS username',
+        'seller.email AS email',
+        'seller.link_name AS link_name',
+        'seller.link AS link',
+        'contact.id AS "contactId"',
+        'seller.profile_picture AS profile_picture',
+        'COALESCE(gallery_count.total_galleries_count, 0) AS total_galleries_count',
+        'COALESCE(prod_count.total_gallery_image_count, 0) AS total_gallery_image_count',
+      ])
+      .andWhere('contact.invited_user_id = :customerId', { customerId: BigInt(customerId) })
+      .andWhere('contact.status = :status', { status: ContactStatus.ACCEPTED })
+      .getRawMany();
+  }
+
+  // Same as findAllSelelrsByCustomer but WITHOUT block filtering, for chat listing
+  async findAllSelelrsByCustomerUnfiltered(customerId: bigint): Promise<SellerInfoType[]> {
+    return this.repository
+      .createQueryBuilder('contact')
+      .innerJoin('users', 'seller', 'seller.id = contact.seller_id AND seller.is_deleted= false ')
       .leftJoin(
         qb =>
           qb

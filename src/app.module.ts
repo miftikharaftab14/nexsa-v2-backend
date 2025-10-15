@@ -17,6 +17,7 @@ import { ChatModule } from './chat/chat.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { GalleryModule } from './galleries/gallery.module';
 import { AdminModule } from './admin/admin.module';
+import { BlocksModule } from './blocks/blocks.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AdminModule } from './admin/admin.module';
     PreferencesModule,
     GalleryModule,
     AdminModule,
+    BlocksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

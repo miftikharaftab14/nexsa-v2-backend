@@ -9,7 +9,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, FindOptionsWhere, MoreThan, Repository, UpdateResult } from 'typeorm';
+import { Between, DataSource, FindOptionsWhere, LessThan, MoreThan, Repository, UpdateResult } from 'typeorm';
 import { Message, MessageType } from './entities/message.entity';
 import { User } from '../users/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
@@ -31,6 +31,7 @@ import {
 } from 'src/common/types/chat';
 import { BulkDeleteDto, DeleteType } from './dto/deleteBulkDto.dto';
 import { DeletedChat } from './entities/deleted-chat.entity';
+import { BlocksService } from 'src/blocks/blocks.service';
 
 @Injectable()
 export class ChatService {
@@ -53,7 +54,8 @@ export class ChatService {
     private readonly dataSource: DataSource,
     @InjectRepository(DeletedChat)
     private readonly deleteChatRepository: Repository<DeletedChat>,
-  ) {}
+    private readonly blocksService: BlocksService,
+  ) { }
   async convertUrls(msgs: Message[]) {
     return await Promise.all(
       msgs.map(async msg => ({
@@ -86,13 +88,24 @@ export class ChatService {
     return this.messageRepository.save(newMessage);
   }
 
+  getCreatedAtCondition(lastDelete?: { createdAt?: Date }, blockSince?: Date) {
+    if (blockSince && lastDelete?.createdAt) {
+      return Between(lastDelete.createdAt, blockSince);
+    } else if (lastDelete?.createdAt) {
+      return MoreThan(lastDelete.createdAt);
+    } else if (blockSince) {
+      return LessThan(blockSince);
+    }
+    return undefined;
+  };
+
   async getConversation(contactId: bigint, userId: bigint) {
     const lastDelete = await this.deleteChatRepository.findOne({
       where: { contactId: contactId.toString(), userId: userId.toString() },
       order: { createdAt: 'DESC' },
     });
 
-    const whereCondition: FindOptionsWhere<Message> = {
+    let whereCondition: any = {
       contactId,
     };
 
@@ -100,6 +113,16 @@ export class ChatService {
       whereCondition.createdAt = MoreThan(lastDelete.createdAt);
     }
 
+    const contact = await this.contactRepository.findOne({ where: { id: contactId } });
+    if (contact) {
+      const otherUserId = contact.seller_id === userId ? contact.invited_user_id : contact.seller_id;
+      const blockSince = await this.blocksService.getLatestBlockTimestampBetween(userId, otherUserId);
+      const createdAtCondition = this.getCreatedAtCondition(lastDelete ?? undefined, blockSince ?? undefined);
+
+      if (createdAtCondition) {
+        whereCondition.createdAt = createdAtCondition;
+      }
+    }
     const messages = await this.messageRepository.find({
       where: whereCondition,
       relations: ['sender'],
@@ -249,7 +272,7 @@ export class ChatService {
       .leftJoinAndSelect('contact.invited_user', 'invited_user')
       .where(
         '(contact.seller_id = :userId AND seller.is_deleted = false AND invited_user.is_deleted = false) ' +
-          'OR (contact.invited_user_id = :userId AND invited_user.is_deleted = false AND seller.is_deleted = false)',
+        'OR (contact.invited_user_id = :userId AND invited_user.is_deleted = false AND seller.is_deleted = false)',
         { userId },
       )
       .orderBy('contact.updated_at', 'DESC')
@@ -268,9 +291,20 @@ export class ChatService {
       read: boolean;
       message: Message | null;
       is_deleted: boolean;
+      isBlocked: boolean;
+      sellerId: string | null;
     }[] = [];
 
     for (const contact of contacts) {
+      // Check if either party has blocked the other
+      const otherUserId = contact.seller_id === userId ? contact.invited_user_id : contact.seller_id;
+      const isCurrentUserBlockedOther = await this.blocksService.isBlocked(userId, otherUserId);
+      let isBlocked = false
+      let sellerId = String(otherUserId)
+      if (isCurrentUserBlockedOther) {
+        isBlocked = true
+      }
+
       const lastDelete = await this.deleteChatRepository.findOne({
         where: {
           contactId: contact.id.toString(),
@@ -287,12 +321,14 @@ export class ChatService {
       };
       const lastMessageWhere: any = { contactId: contact.id };
 
-      if (lastDelete?.createdAt) {
-        messageWhere.createdAt = MoreThan(lastDelete.createdAt);
-        unreadWhere.createdAt = MoreThan(lastDelete.createdAt);
-        lastMessageWhere.createdAt = MoreThan(lastDelete.createdAt);
-      }
+      const blockSince = await this.blocksService.getLatestBlockTimestampBetween(userId, otherUserId);
+      const createdAtCondition = this.getCreatedAtCondition(lastDelete ?? undefined, blockSince ?? undefined);
 
+      if (createdAtCondition) {
+        messageWhere.createdAt = createdAtCondition;
+        unreadWhere.createdAt = createdAtCondition;
+        lastMessageWhere.createdAt = createdAtCondition;
+      }
       const messageCount = await this.messageRepository.count({ where: messageWhere });
       if (messageCount === 0) continue;
 
@@ -319,6 +355,8 @@ export class ChatService {
         messageType: lastMessage?.messageType,
         message: lastMessage,
         is_deleted: contact.seller.is_deleted,
+        isBlocked,
+        sellerId,
       });
     }
 
@@ -384,6 +422,14 @@ export class ChatService {
     const chats: ChatResult[] = [];
 
     for (const contact of contacts) {
+      // Check if either party has blocked the other
+      const otherUserId = contact.seller_id === userId ? contact.invited_user_id : contact.seller_id;
+      const isCurrentUserBlockedOther = await this.blocksService.isBlocked(userId, otherUserId);
+      let isBlocked = false
+      if (isCurrentUserBlockedOther) {
+        isBlocked = true
+      }
+
       const lastDelete = await this.deleteChatRepository.findOne({
         where: {
           contactId: contact.id.toString(),
@@ -395,18 +441,21 @@ export class ChatService {
       this.logger.log(
         ` deleted chat data contactId:${contact.id.toString()} userId:${userId.toString()}`,
       );
-      const messageWhere: any = { contactId: contact.id };
-      const unreadWhere: any = {
+      let messageWhere: any = { contactId: contact.id };
+      let unreadWhere: any = {
         contactId: contact.id,
         read: false,
         senderId: contact.seller_id === userId ? contact.invited_user_id : contact.seller_id,
       };
-      const lastMessageWhere: any = { contactId: contact.id };
+      let lastMessageWhere: any = { contactId: contact.id };
 
-      if (lastDelete?.createdAt) {
-        messageWhere.createdAt = MoreThan(lastDelete.createdAt);
-        unreadWhere.createdAt = MoreThan(lastDelete.createdAt);
-        lastMessageWhere.createdAt = MoreThan(lastDelete.createdAt);
+      const blockSince = await this.blocksService.getLatestBlockTimestampBetween(userId, otherUserId);
+      const createdAtCondition = this.getCreatedAtCondition(lastDelete ?? undefined, blockSince ?? undefined);
+
+      if (createdAtCondition) {
+        messageWhere.createdAt = createdAtCondition;
+        unreadWhere.createdAt = createdAtCondition;
+        lastMessageWhere.createdAt = createdAtCondition;
       }
 
       const messageCount = await this.messageRepository.count({ where: messageWhere });
@@ -437,6 +486,8 @@ export class ChatService {
         lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
         type: ChatType.CHAT,
         is_deleted: contact.invited_user.is_deleted,
+        isBlocked,
+        invitationId: contact?.invited_user_id,
       });
     }
 

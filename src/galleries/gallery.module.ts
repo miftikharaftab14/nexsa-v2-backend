@@ -7,6 +7,7 @@ import { UserModule } from '../users/user.module';
 import { InvitationsModule } from 'src/invitations/invitations.module';
 import { FilesModule } from 'src/files/files.module';
 import { GalleryImage } from 'src/gallery-image/entities/gallery-image.entity';
+import { BlocksModule } from 'src/blocks/blocks.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { GalleryImage } from 'src/gallery-image/entities/gallery-image.entity';
     UserModule,
     InvitationsModule,
     FilesModule,
+    BlocksModule,
   ],
   providers: [GalleryService],
   controllers: [GalleryController],
