@@ -15,6 +15,7 @@ import { InvitationService } from 'src/invitations/services/invitation.service';
 import { FileService } from 'src/files/services/file.service';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { GalleryImage } from 'src/gallery-image/entities/gallery-image.entity';
+import { BlocksService } from 'src/blocks/blocks.service';
 
 @Injectable()
 export class GalleryService {
@@ -27,6 +28,7 @@ export class GalleryService {
     private readonly invitationService: InvitationService,
     @Inject(InjectionToken.FILE_SERVICE)
     private readonly fileService: FileService,
+    private readonly blocksService: BlocksService,
   ) {}
   async convertGalleryImagesPresignedUrl(galleries: Gallery[]): Promise<Gallery[]> {
     return await Promise.all(
@@ -94,6 +96,14 @@ export class GalleryService {
     const user = await this.usersService.findOne(sellerId);
     if (!user) {
       throw new NotFoundException(`User with ID ${sellerId} not found`);
+    }
+
+    // Check if customer has blocked the seller or seller has blocked the customer
+    const isCustomerBlockedSeller = await this.blocksService.isBlocked(BigInt(userId), BigInt(sellerId));
+    const isSellerBlockedCustomer = await this.blocksService.isBlocked(BigInt(sellerId), BigInt(userId));
+    
+    if (isCustomerBlockedSeller || isSellerBlockedCustomer) {
+      throw new ForbiddenException('Access denied: User is blocked.');
     }
 
     const usersRelationVarification = await this.invitationService.verifyCustomerSellerRelation(

@@ -32,13 +32,17 @@ import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { CurrentUserType } from 'src/common/types/current-user.interface';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums/user-role.enum';
+import { BlocksService } from 'src/blocks/blocks.service';
 
 @ApiTags('Contacts')
 @Controller('contacts')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class ContactController {
-  constructor(private readonly contactService: ContactService) {}
+  constructor(
+    private readonly contactService: ContactService,
+    private readonly blocksService: BlocksService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: Descriptions.CREATE_CONTACT_SUMMARY })
@@ -74,12 +78,56 @@ export class ContactController {
   async findAllSelelrsByCustomer(@CurrentUser() user: CurrentUserType) {
     return this.contactService.findAllSelelrsByCustomer(user.userId);
   }
+  @Get('get-seller-chats')
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Get accepted sellers with block status for the logged-in customer' })
+  @ApiResponse(_200_contacts)
+  async findSellerChats(@CurrentUser() user: CurrentUserType) {
+    const sellers = await this.contactService.findSellersForCustomerUnfiltered(user.userId);
+    const enriched = await Promise.all(
+      sellers.map(async (seller: any) => {
+        const sellerId = seller.user_id || seller.id;
+        const relation = await this.blocksService.getBlockRelation(Number(user.userId), Number(sellerId));
+        return {
+          ...seller,
+          isBlocked: relation.isBlocked,
+          blockedBy: relation.blockedBy,
+        };
+      }),
+    );
+    return {
+      success: true,
+      message: Messages.CONTACTS_FETCHED,
+      status: HttpStatus.OK,
+      data: enriched,
+    };
+  }
   @Get('accepted-with-preferences')
   @Roles(UserRole.SELLER)
   @ApiOperation({ summary: 'Get all accepted customer invited by the logged-in sellers' })
   @ApiResponse(_200_contacts)
   async findAcceptedContactsWithPreferences(@CurrentUser() user: CurrentUserType) {
-    return this.contactService.findContactsBySeller(user.userId);
+    const contacts = await this.contactService.findContactsBySeller(user.userId);
+    
+    // Add blocking information to each contact
+    const contactsWithBlocking = await Promise.all(
+      contacts.map(async (contact) => {
+        const customerId = contact.invited_user.id;
+        const isSellerBlockedCustomer = await this.blocksService.isBlocked(user.userId, customerId);
+        const isCustomerBlockedSeller = await this.blocksService.isBlocked(customerId, user.userId);
+        
+        return {
+          ...contact,
+          isBlocked: isSellerBlockedCustomer || isCustomerBlockedSeller,
+          blockingDetails: {
+            sellerBlockedCustomer: isSellerBlockedCustomer,
+            customerBlockedSeller: isCustomerBlockedSeller,
+          }
+        };
+      })
+    );
+    
+    return contactsWithBlocking;
   }
 
   @Get(':id')

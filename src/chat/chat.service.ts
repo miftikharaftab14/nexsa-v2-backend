@@ -31,6 +31,7 @@ import {
 } from 'src/common/types/chat';
 import { BulkDeleteDto, DeleteType } from './dto/deleteBulkDto.dto';
 import { DeletedChat } from './entities/deleted-chat.entity';
+import { BlocksService } from 'src/blocks/blocks.service';
 
 @Injectable()
 export class ChatService {
@@ -53,7 +54,8 @@ export class ChatService {
     private readonly dataSource: DataSource,
     @InjectRepository(DeletedChat)
     private readonly deleteChatRepository: Repository<DeletedChat>,
-  ) {}
+    private readonly blocksService: BlocksService,
+  ) { }
   async convertUrls(msgs: Message[]) {
     return await Promise.all(
       msgs.map(async msg => ({
@@ -249,7 +251,7 @@ export class ChatService {
       .leftJoinAndSelect('contact.invited_user', 'invited_user')
       .where(
         '(contact.seller_id = :userId AND seller.is_deleted = false AND invited_user.is_deleted = false) ' +
-          'OR (contact.invited_user_id = :userId AND invited_user.is_deleted = false AND seller.is_deleted = false)',
+        'OR (contact.invited_user_id = :userId AND invited_user.is_deleted = false AND seller.is_deleted = false)',
         { userId },
       )
       .orderBy('contact.updated_at', 'DESC')
@@ -268,9 +270,20 @@ export class ChatService {
       read: boolean;
       message: Message | null;
       is_deleted: boolean;
+      isBlocked: boolean;
+      sellerId: string | null;
     }[] = [];
 
     for (const contact of contacts) {
+      // Check if either party has blocked the other
+      const otherUserId = contact.seller_id === userId ? contact.invited_user_id : contact.seller_id;
+      const isCurrentUserBlockedOther = await this.blocksService.isBlocked(userId, otherUserId);
+      let isBlocked = false
+      let sellerId = String(otherUserId)
+      if (isCurrentUserBlockedOther) {
+        isBlocked = true
+      }
+
       const lastDelete = await this.deleteChatRepository.findOne({
         where: {
           contactId: contact.id.toString(),
@@ -319,6 +332,8 @@ export class ChatService {
         messageType: lastMessage?.messageType,
         message: lastMessage,
         is_deleted: contact.seller.is_deleted,
+        isBlocked,
+        sellerId,
       });
     }
 
@@ -384,6 +399,14 @@ export class ChatService {
     const chats: ChatResult[] = [];
 
     for (const contact of contacts) {
+      // Check if either party has blocked the other
+      const otherUserId = contact.seller_id === userId ? contact.invited_user_id : contact.seller_id;
+      const isCurrentUserBlockedOther = await this.blocksService.isBlocked(userId, otherUserId);
+      let isBlocked = false
+      if (isCurrentUserBlockedOther) {
+        isBlocked = true
+      }
+
       const lastDelete = await this.deleteChatRepository.findOne({
         where: {
           contactId: contact.id.toString(),
@@ -437,6 +460,8 @@ export class ChatService {
         lastMessageAt: lastMessage?.createdAt?.toISOString() ?? null,
         type: ChatType.CHAT,
         is_deleted: contact.invited_user.is_deleted,
+        isBlocked,
+        invitationId: contact?.invited_user_id,
       });
     }
 

@@ -14,6 +14,7 @@ import { Contact } from 'src/contacts/entities/contact.entity';
 import { FilesModule } from 'src/files/files.module';
 import { DeletedChat } from './entities/deleted-chat.entity';
 import { GalleryImagesModule } from 'src/gallery-image/gallery-images.module';
+import { BlocksModule } from 'src/blocks/blocks.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { GalleryImagesModule } from 'src/gallery-image/gallery-images.module';
     JwtModule.register({}),
     FilesModule,
     GalleryImagesModule,
+    BlocksModule,
     // No forwardRef needed here unless another module imports ChatModule
   ],
   providers: [ChatGateway, ChatService],

@@ -61,4 +61,6 @@ export type ChatResult = {
     mediaUrl: string | null;
     thumbnailUrl: string | null;
   };
+  isBlocked?: boolean;
+  invitationId?: bigint | null;
 };
