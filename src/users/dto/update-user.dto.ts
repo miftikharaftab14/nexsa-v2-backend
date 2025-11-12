@@ -119,4 +119,8 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   first_message_send?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  notification?: boolean;
 }

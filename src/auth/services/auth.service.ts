@@ -18,6 +18,10 @@ import { Invitation } from 'src/invitations/entities/invitation.entity';
 import { AcceptInviteDto } from '../dto/accept-invite.dto';
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { UserDeviceTokenService } from '../../users/services/user-device-token.service';
+import { NotificationService } from '../../common/services/notification.service';
+import { InvitationStatus } from '../../common/enums/contact-invitation.enum';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class AuthService {
@@ -33,6 +37,8 @@ export class AuthService {
     @Inject(InjectionToken.CONTACT_SERVICE)
     private readonly contactService: IContactUpdate,
     private readonly userDeviceTokenService: UserDeviceTokenService,
+    private readonly notificationService: NotificationService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   async signup(dto: SignupDto): Promise<User> {
@@ -214,16 +220,77 @@ export class AuthService {
   async acceptInvite(dto: AcceptInviteDto): Promise<{ message: string; data: Invitation }> {
     this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, dto.invite_id);
 
-    //update the invitation status to ACCEPTED
+    let invitation = await this.invitaionService.getInvitationById(dto.invite_id);
+
+    const invitedUser = await this.userService.findOne(Number(dto.user_id));
+    if (!invitedUser) {
+      throw new BusinessException(Messages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+    }
+
+    const sellerId = invitation.seller_id || invitation.contact?.seller_id;
+    if (!sellerId) {
+      this.logger.warn('Seller ID not found in invitation', dto.invite_id);
+    }
 
     await this.invitaionService.updateInvitationStatusById(dto.invite_id, dto.invitation_status);
 
-    let invitation = await this.invitaionService.getInvitationById(dto.invite_id);
+    invitation = await this.invitaionService.getInvitationById(dto.invite_id);
 
     await this.contactService.update(Number(invitation.contact_id), {
       invited_user_id: Number(dto.user_id),
       status: ContactStatus.ACCEPTED,
     });
+    
+    const contactRepository = this.dataSource.getRepository(Contact);
+    const contact = await contactRepository.findOne({
+      where: { id: BigInt(invitation.contact_id) },
+    });
+
+    if (sellerId) {
+      try {
+        const userRepository = this.dataSource.getRepository(User);
+        const seller = await userRepository.findOne({
+          where: {
+            id: BigInt(sellerId),
+            notification: true,
+            is_deleted: false,
+          },
+        });
+
+        if (seller) {
+          const sellerTokens = await this.userDeviceTokenService.getTokensByUser(
+            BigInt(sellerId),
+          );
+
+          if (sellerTokens.length > 0) {
+            const fullName = contact?.full_name || invitedUser.username || 'User';
+            const actionMessage =
+              dto.invitation_status === InvitationStatus.ACCEPTED
+                ? `User ${fullName} has accepted your invitation`
+                : `User ${fullName} has rejected your invitation`;
+
+            // Send push notification
+            await this.notificationService.sendPushNotification(
+              sellerTokens,
+              'Invitation',
+              actionMessage,
+              {
+                screen: 'Contacts',
+              },
+            );
+
+            this.logger.log(
+              `Push notification sent to seller ${sellerId} for invitation ${dto.invite_id}`,
+            );
+          }
+        }
+      } catch (notifyError) {
+        this.logger.error(
+          `Failed to send push notification to seller ${sellerId}`,
+          notifyError,
+        );
+      }
+    }
 
     return { message: 'invite accepted', data: invitation };
   }

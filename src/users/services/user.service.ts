@@ -178,6 +178,9 @@ export class UserService {
         ...(updateUserDto.first_gallery_open && {
           first_gallery_open: updateUserDto.first_gallery_open,
         }),
+        ...(updateUserDto.notification !== undefined && {
+          notification: updateUserDto.notification,
+        }),
       });
 
       await queryRunner.commitTransaction();

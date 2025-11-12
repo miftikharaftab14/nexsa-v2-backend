@@ -61,6 +61,9 @@ export class User {
   @Column({ default: false })
   first_gallery_open: boolean;
 
+  @Column({ default: true })
+  notification: boolean;
+
   @OneToMany(() => UserDeviceToken, token => token.user)
   deviceTokens: UserDeviceToken[];
 

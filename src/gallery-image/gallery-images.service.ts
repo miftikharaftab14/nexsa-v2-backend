@@ -22,6 +22,9 @@ import { ImageReportRepository } from './repository/image-report.repository';
 import { ConflictException } from '@nestjs/common';
 import { ImageReport } from './entities/image-report.entity';
 import { BlocksService } from 'src/blocks/blocks.service';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource, In } from 'typeorm';
+import { User } from 'src/users/entities/user.entity';
 
 @Injectable()
 export class GalleryImagesService {
@@ -37,6 +40,7 @@ export class GalleryImagesService {
     private readonly contactService: ContactService,
     private readonly imageReportRepository: ImageReportRepository,
     private readonly blocksService: BlocksService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) { }
 
   async convertGalleryImagePresignedUrl(galleryImage: GalleryImage) {
@@ -106,22 +110,37 @@ export class GalleryImagesService {
                   }
                 }
                 customerIds = filteredIds as (bigint)[];
+                
                 if (customerIds.length > 0) {
-                  const tokensArr =
-                    await this.userDeviceTokenService.getTokensByUsers(customerIds);
-                  const tokens = tokensArr.flat().filter(Boolean);
-                  if (tokens.length > 0) {
-                    await this.notificationService.sendPushNotification(
-                      tokens,
-                      'New GalleryImage Available!',
-                      `A new gallery image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
-                      {
-                        productId: String(galleryImage.id),
-                        galleryId: String(gallery.id),
-                        type: 'product',
-                        screen: 'CustomerProductDetail',
-                      },
-                    );
+                  const userRepository = this.dataSource.getRepository(User);
+                  const usersWithNotificationsEnabled = await userRepository.find({
+                    where: {
+                      id: In(customerIds),
+                      notification: true,
+                      is_deleted: false,
+                    },
+                    select: ['id'],
+                  });
+                  
+                  const enabledUserIds = usersWithNotificationsEnabled.map(u => u.id);
+                  
+                  if (enabledUserIds.length > 0) {
+                    const tokensArr =
+                      await this.userDeviceTokenService.getTokensByUsers(enabledUserIds);
+                    const tokens = tokensArr.flat().filter(Boolean);
+                    if (tokens.length > 0) {
+                      await this.notificationService.sendPushNotification(
+                        tokens,
+                        'New Gallery Image Added',
+                        `A new image was added in gallery "${gallery.name}" by ${user.username || user.email || 'a seller'}.`,
+                        {
+                          productId: String(galleryImage.id),
+                          galleryId: String(gallery.id),
+                          type: 'product',
+                          screen: 'CustomerProductDetail',
+                        },
+                      );
+                    }
                   }
                 }
               } catch (notifyError) {

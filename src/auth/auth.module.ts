@@ -19,6 +19,7 @@ import { ContactsModule } from 'src/contacts/contacts.module';
 import { TwilioVerifyService } from 'src/common/services/twilio-verify.service';
 import { FilesModule } from 'src/files/files.module';
 import { UserDeviceTokenModule } from 'src/users/user-device-token.module';
+import { NotificationModule } from 'src/common/modules/Notification.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { UserDeviceTokenModule } from 'src/users/user-device-token.module';
     ContactsModule,
     FilesModule,
     UserDeviceTokenModule,
+    NotificationModule,
   ],
   controllers: [AuthController],
   providers: [

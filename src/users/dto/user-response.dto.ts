@@ -81,6 +81,13 @@ export class UserResponseDto {
   is_deleted?: boolean;
 
   @ApiProperty({
+    description: 'Whether push notifications are enabled',
+    example: true,
+    required: false,
+  })
+  notification?: boolean;
+
+  @ApiProperty({
     description: 'Creation timestamp',
     example: Examples.CREATED_AT,
   })
