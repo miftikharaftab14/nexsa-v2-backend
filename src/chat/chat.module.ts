@@ -15,6 +15,8 @@ import { FilesModule } from 'src/files/files.module';
 import { DeletedChat } from './entities/deleted-chat.entity';
 import { GalleryImagesModule } from 'src/gallery-image/gallery-images.module';
 import { BlocksModule } from 'src/blocks/blocks.module';
+import { NotificationModule } from 'src/common/modules/Notification.module';
+import { UserDeviceTokenModule } from 'src/users/user-device-token.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { BlocksModule } from 'src/blocks/blocks.module';
     FilesModule,
     GalleryImagesModule,
     BlocksModule,
+    NotificationModule,
+    UserDeviceTokenModule,
     // No forwardRef needed here unless another module imports ChatModule
   ],
   providers: [ChatGateway, ChatService],

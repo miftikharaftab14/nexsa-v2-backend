@@ -32,6 +32,9 @@ import {
 import { BulkDeleteDto, DeleteType } from './dto/deleteBulkDto.dto';
 import { DeletedChat } from './entities/deleted-chat.entity';
 import { BlocksService } from 'src/blocks/blocks.service';
+import { NotificationService } from 'src/common/services/notification.service';
+import { UserDeviceTokenService } from 'src/users/services/user-device-token.service';
+import { UserRole } from 'src/common/enums/user-role.enum';
 
 @Injectable()
 export class ChatService {
@@ -55,6 +58,8 @@ export class ChatService {
     @InjectRepository(DeletedChat)
     private readonly deleteChatRepository: Repository<DeletedChat>,
     private readonly blocksService: BlocksService,
+    private readonly notificationService: NotificationService,
+    private readonly userDeviceTokenService: UserDeviceTokenService,
   ) { }
   async convertUrls(msgs: Message[]) {
     return await Promise.all(
@@ -225,12 +230,25 @@ export class ChatService {
             messagesToSave.map(msg => manager.save(msg)), // Save using transactional manager
           );
 
-          // Emit via socket (non-transactional part)
+          // Emit via socket and send notifications (non-transactional part)
           for (const savedMsg of saved) {
             const contact = await this.contactRepository.findOne({ where: { id: bigContactId } });
             if (!contact) continue;
             const receiverId =
               senderId === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+
+            // Check if user blocked receiver or receiver blocked sender
+            const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, senderId);
+            const isSenderBlocked = await this.blocksService.isBlocked(senderId, receiverId);
+
+            if (isReceiverBlocked || isSenderBlocked) {
+              this.logger.log(
+                `Broadcast message from ${senderId} to ${receiverId} blocked - not delivered`,
+              );
+              continue; // Skip this contact if blocked
+            }
+
+            // Emit via socket
             await this.chatGateway.emitMessageToUser(
               contact.id,
               receiverId,
@@ -239,6 +257,62 @@ export class ChatService {
               savedMsg,
               savedMsg.mediaKey ? await this.fileService.getPresignedUrl(savedMsg.mediaKey) : null,
             );
+            
+            if (receiverId) {
+              try {
+                const userRepository = this.dataSource.getRepository(User);
+                const receiver = await userRepository.findOne({
+                  where: {
+                    id: BigInt(receiverId),
+                    notification: true,
+                    is_deleted: false,
+                  },
+                });
+
+                if (receiver) {
+                  const receiverTokens = await this.userDeviceTokenService.getTokensByUser(
+                    BigInt(receiverId),
+                  );
+
+                  if (receiverTokens.length > 0) {
+                    const senderName =
+                      user.role === UserRole.CUSTOMER
+                        ? contact.full_name
+                        : user.username;
+                    let notificationTitle = `New Message from ${senderName}`;
+                    let notificationBody = `You've got a new message — tap to view.`;
+                    
+                    await this.notificationService.sendPushNotification(
+                      receiverTokens,
+                      notificationTitle,
+                      notificationBody,
+                      {
+                        id:
+                          user.role === UserRole.CUSTOMER
+                            ? contact.id.toString()
+                            : user.id.toString() || '',
+                        userName:
+                          user.role === UserRole.CUSTOMER ? contact.full_name : user.username,
+                        avatar: '',
+                        type: 'individual',
+                        isBlocked: 'false',
+                        invitationId: user?.id.toString() || '',
+                        screen: 'ConversationScreen',
+                      },
+                    );
+
+                    this.logger.log(
+                      `Push notification sent to receiver ${receiverId} for broadcast message from ${senderId}`,
+                    );
+                  }
+                }
+              } catch (notifyError) {
+                this.logger.error(
+                  `Failed to send push notification to receiver ${receiverId}`,
+                  notifyError,
+                );
+              }
+            }
           }
 
           sentMessages.push(...saved);

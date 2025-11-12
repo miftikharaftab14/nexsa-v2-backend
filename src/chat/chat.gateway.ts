@@ -40,6 +40,10 @@ import { DeletedChat } from './entities/deleted-chat.entity';
 import { User } from 'src/users/entities/user.entity';
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { BlocksService } from 'src/blocks/blocks.service';
+import { NotificationService } from 'src/common/services/notification.service';
+import { UserDeviceTokenService } from 'src/users/services/user-device-token.service';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 @WebSocketGateway({
   namespace: '/ws/chat',
@@ -68,7 +72,10 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     @InjectRepository(DeletedChat)
     private readonly deleteChatRepository: Repository<DeletedChat>,
     private readonly blocksService: BlocksService,
-  ) {}
+    private readonly notificationService: NotificationService,
+    private readonly userDeviceTokenService: UserDeviceTokenService,
+    @InjectDataSource() private readonly dataSource: DataSource,
+  ) { }
 
   afterInit(server: Server) {
     this.logger.log('ChatGateway Initialized!');
@@ -226,10 +233,62 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         },
         order: { createdAt: 'DESC' },
       });
-      console.log({ broadcastReply });
 
       const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, user.id);
       this.logger.log(`Blocking check: receiver ${receiverId} blocked sender ${user.id}: ${isReceiverBlocked}`);
+
+      if (receiverId && !isReceiverBlocked) {
+        try {
+          const userRepository = this.dataSource.getRepository(User);
+          const receiver = await userRepository.findOne({
+            where: {
+              id: BigInt(receiverId),
+              notification: true,
+              is_deleted: false,
+            },
+          });
+
+          if (receiver) {
+            const receiverTokens = await this.userDeviceTokenService.getTokensByUser(
+              BigInt(receiverId),
+            );
+
+            if (receiverTokens.length > 0 && messages.length > 0) {
+              const senderName =
+                sender.role === UserRole.CUSTOMER
+                  ? contact.full_name
+                  : sender.username;
+
+              let notificationTitle = `New Message from ${senderName}`;
+              let notificationBody = `You've got a new message — tap to view.`;
+              
+              await this.notificationService.sendPushNotification(
+                receiverTokens,
+                notificationTitle,
+                notificationBody, {
+                id: sender.role === UserRole.CUSTOMER ? contact.id.toString() : sender.id.toString() || '',
+                userName: sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
+                avatar:  '',
+                type: 'individual',
+                isBlocked: 'false',
+                invitationId: sender?.id.toString() || '',
+                screen: 'ConversationScreen',
+              }
+              );
+
+              this.logger.log(
+                `Push notification sent to receiver ${receiverId} for message from ${user.id}`,
+              );
+            }
+          }
+        } catch (notifyError) {
+          // Log error but don't fail the message sending
+          this.logger.error(
+            `Failed to send push notification to receiver ${receiverId}`,
+            notifyError,
+          );
+        }
+      }
 
       // Emit each message to receiver and sender
       for (const message of messages) {
@@ -376,7 +435,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
           );
 
           const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, user.id);
-          this.logger.log(`Broadcast blocking check: receiver ${receiverId} blocked sender ${user.id}: ${isReceiverBlocked}`);
+          const isSenderBlocked = await this.blocksService.isBlocked(user.id, receiverId);
+          const isBlocked = isReceiverBlocked || isSenderBlocked;
+          
+          this.logger.log(
+            `Broadcast blocking check: receiver ${receiverId} blocked sender ${user.id}: ${isReceiverBlocked}, sender blocked receiver: ${isSenderBlocked}`,
+          );
+
+          if (isBlocked) {
+            this.logger.log(
+              `Broadcast message from ${user.id} to ${receiverId} blocked - not delivered to receiver`,
+            );
+            return; // Skip this contact if blocked
+          }
 
           if (uploadedMediaFiles.length > 0) {
             for (const file of uploadedMediaFiles) {
@@ -402,11 +473,64 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 message,
                 mediaCont[file.id],
               );
-              
-              if (receiverSocketId && !isReceiverBlocked) {
+
+              if (receiverSocketId) {
                 this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
-              } else if (isReceiverBlocked) {
-                this.logger.log(`Broadcast message from ${user.id} to ${receiverId} blocked - not delivered to receiver`);
+              }
+              if (receiverId) {
+                try {
+                  const userRepository = this.dataSource.getRepository(User);
+                  const receiver = await userRepository.findOne({
+                    where: {
+                      id: BigInt(receiverId),
+                      notification: true,
+                      is_deleted: false,
+                    },
+                  });
+
+                  if (receiver) {
+                    const receiverTokens = await this.userDeviceTokenService.getTokensByUser(
+                      BigInt(receiverId),
+                    );
+
+                    if (receiverTokens.length > 0) {
+                      const senderName =
+                        sender.role === UserRole.CUSTOMER
+                          ? contact.full_name
+                          : sender.username;
+                      let notificationTitle = `New Message from ${senderName}`;
+                      let notificationBody = `You've got a new message — tap to view.`;
+                      
+                      await this.notificationService.sendPushNotification(
+                        receiverTokens,
+                        notificationTitle,
+                        notificationBody,
+                        {
+                          id:
+                            sender.role === UserRole.CUSTOMER
+                              ? contact.id.toString()
+                              : sender.id.toString() || '',
+                          userName:
+                            sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
+                          avatar: '',
+                          type: 'individual',
+                          isBlocked: 'false',
+                          invitationId: sender?.id.toString() || '',
+                          screen: 'ConversationScreen',
+                        },
+                      );
+
+                      this.logger.log(
+                        `Push notification sent to receiver ${receiverId} for broadcast message from ${user.id}`,
+                      );
+                    }
+                  }
+                } catch (notifyError) {
+                  this.logger.error(
+                    `Failed to send push notification to receiver ${receiverId}`,
+                    notifyError,
+                  );
+                }
               }
             }
           } else {
@@ -426,11 +550,67 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
               message,
               null,
             );
-            
-            if (receiverSocketId && !isReceiverBlocked) {
+
+            if (receiverSocketId) {
               this.server.to(receiverSocketId).emit('receive_message', chatMessageResult);
-            } else if (isReceiverBlocked) {
-              this.logger.log(`Broadcast message from ${user.id} to ${receiverId} blocked - not delivered to receiver`);
+            }
+            if (receiverId) {
+              try {
+                const userRepository = this.dataSource.getRepository(User);
+                const receiver = await userRepository.findOne({
+                  where: {
+                    id: BigInt(receiverId),
+                    notification: true,
+                    is_deleted: false,
+                  },
+                });
+
+                if (receiver) {
+                  const receiverTokens = await this.userDeviceTokenService.getTokensByUser(
+                    BigInt(receiverId),
+                  );
+
+                  if (receiverTokens.length > 0) {
+                    const senderName =
+                      sender.role === UserRole.CUSTOMER
+                        ? contact.full_name
+                        : sender.username;
+
+                    // Get message content for notification
+                    let notificationTitle = `New Message from ${senderName}`;
+                    let notificationBody = `You've got a new message — tap to view.`;
+
+                    // Send push notification
+                    await this.notificationService.sendPushNotification(
+                      receiverTokens,
+                      notificationTitle,
+                      notificationBody,
+                      {
+                        id:
+                          sender.role === UserRole.CUSTOMER
+                            ? contact.id.toString()
+                            : sender.id.toString() || '',
+                        userName:
+                          sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
+                        avatar: '',
+                        type: 'individual',
+                        isBlocked: 'false',
+                        invitationId: sender?.id.toString() || '',
+                        screen: 'ConversationScreen',
+                      },
+                    );
+
+                    this.logger.log(
+                      `Push notification sent to receiver ${receiverId} for broadcast message from ${user.id}`,
+                    );
+                  }
+                }
+              } catch (notifyError) {
+                this.logger.error(
+                  `Failed to send push notification to receiver ${receiverId}`,
+                  notifyError,
+                );
+              }
             }
           }
         }),
@@ -607,7 +787,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     message: Message,
     mediaUrl: string | null,
   ) {
-    
+
     const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, sender.id);
     this.logger.log(`EmitMessageToUser blocking check: receiver ${receiverId} blocked sender ${sender.id}: ${isReceiverBlocked}`);
 
