@@ -266,7 +266,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 receiverTokens,
                 notificationTitle,
                 notificationBody, {
-                id: sender.role === UserRole.CUSTOMER ? contact.id.toString() : sender.id.toString() || '',
+                  id: sender.role === UserRole.CUSTOMER ? contact.id.toString() : contact.seller_id.toString() || '',
                 userName: sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
                 avatar:  '',
                 type: 'individual',
@@ -752,6 +752,60 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         this.server.to(receiverSocketId).emit('receive_message', resultMessage);
       } else if (isReceiverBlocked) {
         this.logger.log(`Product chat message from ${user.id} to ${receiverId} blocked - not delivered to receiver`);
+      }
+
+      // Send push notification to receiver if they have notifications enabled
+      if (receiverId && !isReceiverBlocked) {
+        try {
+          const userRepository = this.dataSource.getRepository(User);
+          const receiver = await userRepository.findOne({
+            where: {
+              id: BigInt(receiverId),
+              notification: true,
+              is_deleted: false,
+            },
+          });
+
+          if (receiver) {
+            const receiverTokens = await this.userDeviceTokenService.getTokensByUser(
+              BigInt(receiverId),
+            );
+
+            if (receiverTokens.length > 0) {
+              const senderName =
+                sender.role === UserRole.CUSTOMER
+                  ? contact.full_name
+                  : sender.username;
+
+              let notificationTitle = `New Message from ${senderName}`;
+              let notificationBody = `You've got a new message — tap to view.`;
+              
+              await this.notificationService.sendPushNotification(
+                receiverTokens,
+                notificationTitle,
+                notificationBody, {
+                id: sender.role === UserRole.CUSTOMER ? contact.id.toString() : contact.seller_id.toString() || '',
+                userName: sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
+                avatar:  '',
+                type: 'individual',
+                isBlocked: 'false',
+                invitationId: sender?.id.toString() || '',
+                screen: 'ConversationScreen',
+              }
+              );
+
+              this.logger.log(
+                `Push notification sent to receiver ${receiverId} for product chat message from ${user.id}`,
+              );
+            }
+          }
+        } catch (notifyError) {
+          // Log error but don't fail the message sending
+          this.logger.error(
+            `Failed to send push notification to receiver ${receiverId}`,
+            notifyError,
+          );
+        }
       }
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
       if (senderSocketId)
