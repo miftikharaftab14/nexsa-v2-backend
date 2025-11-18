@@ -180,7 +180,7 @@ export class GalleryService {
       .where('gallery.user_id = :sellerId')
       .andWhere('gallery.is_deleted = false')
       .groupBy('gallery.id, gallery.name, pc.total_gallery_image_count')
-      .orderBy('gallery.id', 'ASC')
+      .orderBy('gallery.id', 'DESC')
       .setParameters({ userId, sellerId }) // Pass both userId and sellerId
       .getRawMany();
 
