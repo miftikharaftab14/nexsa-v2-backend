@@ -111,20 +111,22 @@ export class ContactController {
     
     // Add blocking information to each contact
     const contactsWithBlocking = await Promise.all(
-      contacts.map(async (contact) => {
-        const customerId = contact.invited_user.id;
-        const isSellerBlockedCustomer = await this.blocksService.isBlocked(user.userId, customerId);
-        const isCustomerBlockedSeller = await this.blocksService.isBlocked(customerId, user.userId);
-        
-        return {
-          ...contact,
-          isBlocked: isSellerBlockedCustomer || isCustomerBlockedSeller,
-          blockingDetails: {
-            sellerBlockedCustomer: isSellerBlockedCustomer,
-            customerBlockedSeller: isCustomerBlockedSeller,
-          }
-        };
-      })
+      contacts
+        .filter(contact => contact.invited_user) // Filter out contacts with null invited_user
+        .map(async (contact) => {
+          const customerId = contact.invited_user.id;
+          const isSellerBlockedCustomer = await this.blocksService.isBlocked(user.userId, customerId);
+          const isCustomerBlockedSeller = await this.blocksService.isBlocked(customerId, user.userId);
+          
+          return {
+            ...contact,
+            isBlocked: isSellerBlockedCustomer || isCustomerBlockedSeller,
+            blockingDetails: {
+              sellerBlockedCustomer: isSellerBlockedCustomer,
+              customerBlockedSeller: isCustomerBlockedSeller,
+            }
+          };
+        })
     );
     
     return contactsWithBlocking;

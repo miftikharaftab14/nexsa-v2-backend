@@ -195,6 +195,9 @@ export class ContactRepository extends BaseRepository<Contact> {
 
     // Replace preference IDs with names
     contacts.forEach(contact => {
+      if (!contact.invited_user) {
+        return; // Skip if invited_user is null
+      }
       const matchedNames = preferences
         .filter(pref => (contact.invited_user.preferences || []).includes(String(pref.id)))
         .map(pref => pref.name);
