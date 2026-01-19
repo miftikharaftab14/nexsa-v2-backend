@@ -2,9 +2,15 @@ import { ConfigService } from '@nestjs/config';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { config } from 'dotenv';
 import { join } from 'path';
+import { existsSync } from 'fs';
 
-// Load environment variables from .env.development
-config({ path: '.env.development' });
+// Load env vars for local CLI usage if an env file exists; in ECS/RDS, values are injected via environment variables.
+const envPath = process.env.DOTENV_FILE ?? `.env.${process.env.NODE_ENV || 'development'}`;
+if (existsSync(envPath)) {
+  config({ path: envPath });
+} else {
+  config();
+}
 
 const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',

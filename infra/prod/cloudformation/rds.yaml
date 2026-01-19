@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nexsa V2 - RDS Postgres (single-AZ) + Secrets Manager password
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+
+  DbSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  DbSubnetBId:
+    Type: AWS::EC2::Subnet::Id
+  RdsSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+
+  DbName:
+    Type: String
+    Default: nexsa_v2
+  DbUsername:
+    Type: String
+    Default: nexsaadmin
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.small
+  DbAllocatedStorageGb:
+    Type: Number
+    Default: 50
+  DbBackupRetentionDays:
+    Type: Number
+    Default: 7
+
+Resources:
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub '${ProjectName}-${EnvironmentName}-db-subnets'
+      SubnetIds:
+        - !Ref DbSubnetAId
+        - !Ref DbSubnetBId
+
+  DbPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Sub '${ProjectName}/${EnvironmentName}/dbPassword'
+      Description: !Sub '${ProjectName} ${EnvironmentName} database password'
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\\'
+
+  DbInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DBInstanceIdentifier: !Sub '${ProjectName}-${EnvironmentName}-postgres'
+      Engine: postgres
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: !Ref DbAllocatedStorageGb
+      StorageType: gp3
+      BackupRetentionPeriod: !Ref DbBackupRetentionDays
+      PubliclyAccessible: false
+      MultiAZ: false
+      DBName: !Ref DbName
+      MasterUsername: !Ref DbUsername
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DbPasswordSecret}:SecretString}}'
+      VPCSecurityGroups:
+        - !Ref RdsSecurityGroupId
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      DeletionProtection: true
+      AutoMinorVersionUpgrade: true
+
+Outputs:
+  DbHost:
+    Value: !GetAtt DbInstance.Endpoint.Address
+  DbPort:
+    Value: !GetAtt DbInstance.Endpoint.Port
+  DbName:
+    Value: !Ref DbName
+  DbPasswordSecretArn:
+    Value: !Ref DbPasswordSecret
+
+

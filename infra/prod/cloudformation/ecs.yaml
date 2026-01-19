@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nexsa V2 - ECS on EC2 (lowest-cost baseline) + Service behind ALB
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnetBId:
+    Type: AWS::EC2::Subnet::Id
+  EcsSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+
+  InstanceType:
+    Type: String
+    Default: t3.small
+
+  EcsAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id
+
+  EcsInstanceProfileName:
+    Type: String
+  TaskExecutionRoleArn:
+    Type: String
+  TaskRoleArn:
+    Type: String
+
+  RepositoryUri:
+    Type: String
+  TargetGroupArn:
+    Type: String
+  LogGroupName:
+    Type: String
+
+  ContainerPort:
+    Type: Number
+    Default: 3000
+  AsgMinSize:
+    Type: Number
+    Default: 1
+  AsgDesiredCapacity:
+    Type: Number
+    Default: 1
+  AsgMaxSize:
+    Type: Number
+    Default: 2
+  ServiceDesiredCount:
+    Type: Number
+    Default: 1
+
+  DbHost:
+    Type: String
+  DbPort:
+    Type: String
+  DbName:
+    Type: String
+  DbUsername:
+    Type: String
+  DbPasswordSecretArn:
+    Type: String
+
+Mappings:
+  # Conservative defaults; adjust after observing metrics
+  TaskSizing:
+    Default:
+      Cpu: 512
+      Memory: 1024
+
+Resources:
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${ProjectName}-${EnvironmentName}-cluster'
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${ProjectName}-${EnvironmentName}-ecs-lt'
+      LaunchTemplateData:
+        ImageId: !Ref EcsAmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Name: !Ref EcsInstanceProfileName
+        SecurityGroupIds:
+          - !Ref EcsSecurityGroupId
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            echo ECS_CLUSTER=${Cluster} >> /etc/ecs/ecs.config
+            echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PublicSubnetAId
+        - !Ref PublicSubnetBId
+      MinSize: !Ref AsgMinSize
+      DesiredCapacity: !Ref AsgDesiredCapacity
+      MaxSize: !Ref AsgMaxSize
+      HealthCheckType: EC2
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-ecs-instance'
+          PropagateAtLaunch: true
+
+  # NOTE: InstanceType is set via a LaunchTemplate override pattern. CloudFormation doesn't
+  # allow directly parameterizing InstanceType when using the ECS SSM parameter in this file
+  # without duplicating LT. We keep a minimal approach by using an ASG MixedInstancesPolicy
+  # alternative only if needed later.
+
+  CapacityProvider:
+    Type: AWS::ECS::CapacityProvider
+    Properties:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-cp'
+      AutoScalingGroupProvider:
+        AutoScalingGroupArn: !GetAtt AutoScalingGroup.Arn
+        ManagedScaling:
+          Status: ENABLED
+          TargetCapacity: 100
+          MinimumScalingStepSize: 1
+          MaximumScalingStepSize: 2
+        ManagedTerminationProtection: DISABLED
+
+  ClusterCapacityProviderAssociation:
+    Type: AWS::ECS::ClusterCapacityProviderAssociations
+    Properties:
+      Cluster: !Ref Cluster
+      CapacityProviders:
+        - !Ref CapacityProvider
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: !Ref CapacityProvider
+          Weight: 1
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-${EnvironmentName}-api'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - EC2
+      Cpu: !FindInMap [TaskSizing, Default, Cpu]
+      Memory: !FindInMap [TaskSizing, Default, Memory]
+      ExecutionRoleArn: !Ref TaskExecutionRoleArn
+      TaskRoleArn: !Ref TaskRoleArn
+      ContainerDefinitions:
+        - Name: api
+          Image: !Sub '${RepositoryUri}:latest'
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: !Ref ContainerPort
+            - Name: POSTGRES_HOST
+              Value: !Ref DbHost
+            - Name: POSTGRES_PORT
+              Value: !Ref DbPort
+            - Name: POSTGRES_USER
+              Value: !Ref DbUsername
+            - Name: POSTGRES_DB
+              Value: !Ref DbName
+          Secrets:
+            - Name: POSTGRES_PASSWORD
+              ValueFrom: !Ref DbPasswordSecretArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupName
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # One-off migration task definition (use in CI/CD with `aws ecs run-task`)
+  MigrationTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-${EnvironmentName}-migrate'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - EC2
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn: !Ref TaskExecutionRoleArn
+      TaskRoleArn: !Ref TaskRoleArn
+      ContainerDefinitions:
+        - Name: migrate
+          Image: !Sub '${RepositoryUri}:latest'
+          Essential: true
+          Command:
+            - npm
+            - run
+            - migration:run:prod
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: POSTGRES_HOST
+              Value: !Ref DbHost
+            - Name: POSTGRES_PORT
+              Value: !Ref DbPort
+            - Name: POSTGRES_USER
+              Value: !Ref DbUsername
+            - Name: POSTGRES_DB
+              Value: !Ref DbName
+          Secrets:
+            - Name: POSTGRES_PASSWORD
+              ValueFrom: !Ref DbPasswordSecretArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupName
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: migrate
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ClusterCapacityProviderAssociation
+    Properties:
+      ServiceName: !Sub '${ProjectName}-${EnvironmentName}-api'
+      Cluster: !Ref Cluster
+      DesiredCount: !Ref ServiceDesiredCount
+      CapacityProviderStrategy:
+        - CapacityProvider: !Ref CapacityProvider
+          Weight: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+      EnableExecuteCommand: true
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref EcsSecurityGroupId
+          Subnets:
+            - !Ref PublicSubnetAId
+            - !Ref PublicSubnetBId
+      LoadBalancers:
+        - ContainerName: api
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroupArn
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+  ServiceName:
+    Value: !Ref Service
+  MigrationTaskDefinitionArn:
+    Value: !Ref MigrationTaskDefinition
+
+

@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nexsa V2 - Minimal observability (CloudWatch Log Group)
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/${ProjectName}/${EnvironmentName}/api'
+      RetentionInDays: !Ref LogRetentionDays
+
+Outputs:
+  LogGroupName:
+    Value: !Ref LogGroup
+
+

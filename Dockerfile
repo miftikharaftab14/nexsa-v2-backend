@@ -1,22 +1,29 @@
-# Use official Node.js Alpine image
-FROM node:22-alpine
-
-# Set working directory
+# Build dependencies
+FROM node:22-alpine AS deps
 WORKDIR /usr/src/app
-
-# Install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
-# Copy the rest of the application
+# Build application
+FROM node:22-alpine AS build
+WORKDIR /usr/src/app
+COPY --from=deps /usr/src/app/node_modules ./node_modules
 COPY . .
+RUN npm run build
 
-# Copy the start script
+# Runtime image (production)
+FROM node:22-alpine AS runtime
+WORKDIR /usr/src/app
+ENV NODE_ENV=production
+
+COPY package*.json ./
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+RUN npm prune --omit=dev
+
+COPY --from=build /usr/src/app/dist ./dist
+COPY --from=build /usr/src/app/public ./public
 COPY start.sh ./start.sh
 RUN chmod +x ./start.sh
 
-# Expose the default NestJS port
 EXPOSE 3000
-
-# Use the start script as the container's command
 CMD ["sh", "./start.sh"]

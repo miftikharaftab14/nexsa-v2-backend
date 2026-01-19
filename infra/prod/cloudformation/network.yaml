@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nexsa V2 - Network (VPC, subnets, routing). Lowest-cost: ECS and ALB in public subnets, RDS in private DB subnets.
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+  VpcCidr:
+    Type: String
+  PublicSubnetCidrA:
+    Type: String
+  PublicSubnetCidrB:
+    Type: String
+  PrivateDbSubnetCidrA:
+    Type: String
+  PrivateDbSubnetCidrB:
+    Type: String
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-vpc'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-igw'
+
+  VpcIgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-rt'
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcIgwAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref PublicSubnetCidrA
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-a'
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Ref PublicSubnetCidrB
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-b'
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateDbSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref PrivateDbSubnetCidrA
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-db-a'
+
+  PrivateDbSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Ref PrivateDbSubnetCidrB
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-db-b'
+
+  PrivateDbRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-db-rt'
+
+  PrivateDbSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateDbSubnetA
+      RouteTableId: !Ref PrivateDbRouteTable
+
+  PrivateDbSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateDbSubnetB
+      RouteTableId: !Ref PrivateDbRouteTable
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+  PublicSubnetAId:
+    Value: !Ref PublicSubnetA
+  PublicSubnetBId:
+    Value: !Ref PublicSubnetB
+  PrivateDbSubnetAId:
+    Value: !Ref PrivateDbSubnetA
+  PrivateDbSubnetBId:
+    Value: !Ref PrivateDbSubnetB
+
+
