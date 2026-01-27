@@ -35,6 +35,9 @@ export class S3Service {
         accessKeyId,
         secretAccessKey,
       },
+      // Use virtual-hosted-style URLs (bucket.s3.region.amazonaws.com)
+      // This is the default, but explicit for clarity
+      forcePathStyle: false,
     });
     this.bucketName = bucketName;
   }
@@ -122,7 +125,9 @@ export class S3Service {
         Bucket: this.bucketName,
         Key: key,
       });
-      return await getSignedUrl(this.s3Client, command, { expiresIn });
+      const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+      // Ensure presigned URLs use HTTPS (fix for 301 redirects)
+      return url.replace(/^http:/, 'https:');
     } catch (error) {
       this.logger.error(
         `Failed to generate presigned URL: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -193,9 +198,17 @@ export class S3Service {
           });
 
           const [presignedUrl, getUrl] = await Promise.all([
-            getSignedUrl(this.s3Client, putCommand, { expiresIn: 60 * 60 }), // 1 hour
-            getSignedUrl(this.s3Client, getCommand, { expiresIn: 60 * 60 }), // 1 hour
+            getSignedUrl(this.s3Client, putCommand, { 
+              expiresIn: 60 * 60, // 1 hour
+            }),
+            getSignedUrl(this.s3Client, getCommand, { 
+              expiresIn: 60 * 60, // 1 hour
+            }),
           ]);
+
+          // Ensure presigned URLs use HTTPS (fix for 301 redirects)
+          const normalizedPresignedUrl = presignedUrl.replace(/^http:/, 'https:');
+          const normalizedGetUrl = getUrl.replace(/^http:/, 'https:');
 
           // Generate CloudFront URL
           const cloudFrontDomain = this.configService.get<string>('CLOUDFRONT_DOMAIN');
@@ -208,8 +221,8 @@ export class S3Service {
             fileType: file.fileType,
             index: index + 1, // 1-based index
             key,
-            presignedUrl,
-            getUrl,
+            presignedUrl: normalizedPresignedUrl,
+            getUrl: normalizedGetUrl,
             cloudFrontUrl,
           };
         }),
