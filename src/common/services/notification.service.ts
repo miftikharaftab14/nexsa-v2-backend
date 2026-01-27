@@ -1,24 +1,33 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import { ServiceAccount } from 'firebase-admin';
-import * as path from 'path';
 
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger('NotificationService');
   private initialized = false;
 
-  constructor() {
+  constructor(private configService: ConfigService) {
     this.initFirebase();
   }
 
   private initFirebase() {
     if (this.initialized) return;
     try {
-      const serviceAccountPath = path.resolve(process.cwd(), 'serviceAccountKey.json');
+      const serviceAccount: ServiceAccount = {
+        projectId: this.configService.get<string>('FIREBASE_PROJECT_ID'),
+        clientEmail: this.configService.get<string>('FIREBASE_CLIENT_EMAIL'),
+        privateKey: this.configService.get<string>('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n'),
+      };
 
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const serviceAccount = require(serviceAccountPath) as ServiceAccount;
+      if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
+        this.logger.warn(
+          'Firebase configuration missing (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY). Push notifications will be disabled.',
+        );
+        return;
+      }
+
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
@@ -26,7 +35,8 @@ export class NotificationService {
       this.logger.log('Firebase Admin initialized for push notifications');
     } catch (error) {
       this.logger.error('Failed to initialize Firebase Admin', error);
-      throw new InternalServerErrorException('Failed to initialize Firebase Admin');
+      this.logger.warn('Push notifications will be disabled due to Firebase initialization failure');
+      // Don't throw - allow app to start without Firebase
     }
   }
 
@@ -43,7 +53,13 @@ export class NotificationService {
     body: string,
     data?: Record<string, string>,
   ): Promise<void> {
-    if (!this.initialized) this.initFirebase();
+    if (!this.initialized) {
+      this.initFirebase();
+      if (!this.initialized) {
+        this.logger.warn('Cannot send push notification: Firebase not initialized');
+        return;
+      }
+    }
     if (!tokens || tokens.length === 0) return;
     try {
       await Promise.all(

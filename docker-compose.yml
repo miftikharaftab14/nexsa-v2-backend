@@ -10,7 +10,7 @@ services:
     env_file:
       - .env
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     networks:
       - app-network
 
@@ -23,9 +23,6 @@ services:
       - .env
     environment:
       - NODE_ENV=${NODE_ENV}
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
     depends_on:
       - db
     networks:

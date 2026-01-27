@@ -2,10 +2,8 @@
 
 set -e
 
-echo "🚀 Starting Nexsa API (NODE_ENV=${NODE_ENV})..."
+echo "🚀 Starting Nexsa API in Docker (NODE_ENV=${NODE_ENV})..."
 
-if [ "$NODE_ENV" = "production" ]; then
-  npm run start:prod
-else
-  npm run start:dev
-fi
+# In the Docker image we only have the compiled dist/, not the full Nest
+# workspace with tsconfig.json and src/, so we always run the compiled app.
+pnpm run start:prod

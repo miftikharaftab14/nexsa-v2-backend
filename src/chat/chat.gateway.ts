@@ -90,7 +90,10 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       const subClient = pubClient.duplicate();
       this.redis = pubClient;
 
-      server.adapter(createAdapter(pubClient, subClient));
+      server.adapter(createAdapter(pubClient, subClient, {
+        key: this.redisPrefix,
+        requestsTimeout: 5000,
+      }));
 
       this.logger.log('✅ Redis adapter initialized on WebSocket server');
     } catch (err: unknown) {

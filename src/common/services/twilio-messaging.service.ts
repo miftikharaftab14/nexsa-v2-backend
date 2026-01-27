@@ -8,10 +8,11 @@ import { InterfaceTwilioMessagingService, TwilioMessagingServiceResponse } from 
 
 @Injectable()
 export class TwilioMessagingService implements InterfaceTwilioMessagingService {
-    private readonly client: Twilio;
-    private messagingServiceSid: string;
-    private readonly fromNumber;
+    private readonly client: Twilio | null = null;
+    private messagingServiceSid: string | undefined = undefined;
+    private readonly fromNumber: string | undefined = undefined;
     private readonly logger = new Logger(TwilioMessagingService.name);
+    private initialized = false;
 
     constructor(
         private readonly configService: ConfigService,
@@ -22,21 +23,26 @@ export class TwilioMessagingService implements InterfaceTwilioMessagingService {
         const messagingServiceSid = this.configService.get<string>('TWILIO_MESSAGING_SERVICE_ID');
 
         if (!messagingServiceSid) {
-            this.logger.error('TWILIO_MESSAGING_SERVICE_ID is missing in environment variables');
-            throw new BusinessException('TWILIO_MESSAGING_SERVICE_ID is required', 'TWILIO_CONFIG_MISSING');
+            this.logger.warn('TWILIO_MESSAGING_SERVICE_ID is missing in environment variables. SMS messaging will be disabled.');
+            return;
         }
-
-        this.messagingServiceSid = messagingServiceSid;
-        this.fromNumber = fromNumber;
 
         // Validate Twilio configuration
         if (!accountSid || !authToken) {
-            this.logger.error(LogMessages.TWILIO_CONFIG_MISSING);
-            throw new BusinessException(LogMessages.TWILIO_CONFIG_MISSING, 'TWILIO_CONFIG_MISSING');
+            this.logger.warn('TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN is missing. SMS messaging will be disabled.');
+            return;
         }
 
-        this.client = new Twilio(accountSid, authToken);
-        this.logger.log(LogMessages.TWILIO_SERVICE_INITIALIZED);
+        try {
+            this.messagingServiceSid = messagingServiceSid;
+            this.fromNumber = fromNumber;
+            this.client = new Twilio(accountSid, authToken);
+            this.initialized = true;
+            this.logger.log(LogMessages.TWILIO_SERVICE_INITIALIZED);
+        } catch (error) {
+            this.logger.error('Failed to initialize Twilio Messaging Service', error);
+            this.logger.warn('SMS messaging will be disabled.');
+        }
     }
 
 
@@ -58,13 +64,14 @@ export class TwilioMessagingService implements InterfaceTwilioMessagingService {
                 'TWILIO_VERIFICATION_PARAMS_MISSING',
             );
         }
-        // Validate phone number format
-        // if (!/^\+\d{1,15}$/.test(`+${toNumber}`)) {
-        //     throw new BusinessException(
-        //         'Phone number must be in E.164 format (e.g., +1234567890)',
-        //         'TWILIO_VERIFICATION_PHONE_INVALID',
-        //     );
-        // }
+
+        if (!this.initialized || !this.client || !this.messagingServiceSid || !this.fromNumber) {
+            this.logger.warn('Twilio Messaging Service is not initialized. Cannot send SMS.');
+            throw new BusinessException(
+                'SMS service is not available. Twilio configuration is missing.',
+                'TWILIO_SERVICE_NOT_AVAILABLE',
+            );
+        }
 
         this.logger.log(`Checking verification for phone number: ${toNumber} with message body: ${messageBody}`);
 

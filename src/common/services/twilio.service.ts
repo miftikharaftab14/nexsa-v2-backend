@@ -20,10 +20,12 @@ import { IMessagingService } from '../interfaces/messaging-service.interface';
 
 @Injectable()
 export class TwilioService implements IOtpService, IMessagingService {
-  private readonly client: Twilio;
-  private serviceId: string;
-  private readonly fromNumber: string;
+  private readonly client: Twilio | null = null;
+  private serviceId: string | undefined = undefined;
+  private readonly fromNumber: string | undefined = undefined;
   private readonly logger = new Logger(TwilioService.name);
+
+  private initialized = false;
 
   constructor(
     private readonly configService: ConfigService,
@@ -33,20 +35,28 @@ export class TwilioService implements IOtpService, IMessagingService {
     const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
     const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
     const serviceId = this.configService.get<string>('TWILIO_SERVICE_ID');
+    
     if (!serviceId) {
-      this.logger.error('TWILIO_SERVICE_ID is missing in environment variables');
-      throw new BusinessException('TWILIO_SERVICE_ID is required', 'TWILIO_CONFIG_MISSING');
+      this.logger.warn('TWILIO_SERVICE_ID is missing in environment variables. Twilio OTP service will be disabled.');
+      return;
     }
-    this.serviceId = serviceId;
-    this.fromNumber = this.configService.get<string>('TWILIO_PHONE_NUMBER') || '';
+    
+    this.fromNumber = this.configService.get<string>('TWILIO_PHONE_NUMBER');
 
     if (!accountSid || !authToken || !this.fromNumber) {
-      this.logger.error(LogMessages.TWILIO_CONFIG_MISSING);
-      throw new BusinessException(LogMessages.TWILIO_CONFIG_MISSING, 'TWILIO_CONFIG_MISSING');
+      this.logger.warn('TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_PHONE_NUMBER is missing. Twilio OTP service will be disabled.');
+      return;
     }
 
-    this.client = new Twilio(accountSid, authToken);
-    this.logger.log(LogMessages.TWILIO_SERVICE_INITIALIZED);
+    try {
+      this.serviceId = serviceId;
+      this.client = new Twilio(accountSid, authToken);
+      this.initialized = true;
+      this.logger.log(LogMessages.TWILIO_SERVICE_INITIALIZED);
+    } catch (error) {
+      this.logger.error('Failed to initialize Twilio Service', error);
+      this.logger.warn('Twilio OTP service will be disabled.');
+    }
   }
 
   private generateOtp(): string {
@@ -127,6 +137,15 @@ export class TwilioService implements IOtpService, IMessagingService {
       await this.otpRepository.save(otpRecord);
 
       // Send SMS
+      if (!this.initialized || !this.client || !this.fromNumber) {
+        this.logger.warn('Twilio Service is not initialized. OTP was saved but SMS was not sent.');
+        return {
+          success: true,
+          message: `OTP generated for ${phoneNumber} (SMS service unavailable)`,
+          otp,
+        };
+      }
+
       await this.client.messages.create({
         body: `Your Nexsa verification code is: ${otp}`,
         from: this.fromNumber,
@@ -279,11 +298,18 @@ export class TwilioService implements IOtpService, IMessagingService {
   }
 
   async sendMessage(to: string, message: string): Promise<void> {
+    if (!this.initialized || !this.client || !this.fromNumber) {
+      this.logger.warn('Twilio Service is not initialized. Cannot send message.');
+      throw new BusinessException(
+        'SMS service is not available. Twilio configuration is missing.',
+        'TWILIO_SERVICE_NOT_AVAILABLE',
+      );
+    }
     this.logger.log('MESSAGE_DEEPLINK', message);
     await this.client.messages.create({
       body: message,
       to: to,
-      from: this.configService.get<string>('TWILIO_PHONE_NUMBER'),
+      from: this.fromNumber,
     });
   }
 }

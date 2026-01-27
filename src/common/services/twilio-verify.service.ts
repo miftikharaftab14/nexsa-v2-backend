@@ -8,9 +8,10 @@ import { Messages } from '../enums/messages.enum';
 
 @Injectable()
 export class TwilioVerifyService implements InterfaceTwilioVerifyService {
-    private readonly client: Twilio;
-    private verifyServiceSid: string;
+    private readonly client: Twilio | null = null;
+    private verifyServiceSid: string | undefined = undefined;
     private readonly logger = new Logger(TwilioVerifyService.name);
+    private initialized = false;
 
     constructor(
         private readonly configService: ConfigService,
@@ -20,19 +21,24 @@ export class TwilioVerifyService implements InterfaceTwilioVerifyService {
         const verifyServiceSid = this.configService.get<string>('TWILIO_VERIFY_SERVICE_ID');
 
         if (!verifyServiceSid) {
-            this.logger.error('TWILIO_VERIFY_SERVICE_ID is missing in environment variables');
-            throw new BusinessException('TWILIO_VERIFY_SERVICE_ID is required', 'TWILIO_CONFIG_MISSING');
+            this.logger.warn('TWILIO_VERIFY_SERVICE_ID is missing in environment variables. OTP verification will be disabled.');
+            return;
         }
-
-        this.verifyServiceSid = verifyServiceSid;
 
         if (!accountSid || !authToken) {
-            this.logger.error(LogMessages.TWILIO_CONFIG_MISSING);
-            throw new BusinessException(LogMessages.TWILIO_CONFIG_MISSING, 'TWILIO_CONFIG_MISSING');
+            this.logger.warn('TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN is missing. OTP verification will be disabled.');
+            return;
         }
 
-        this.client = new Twilio(accountSid, authToken);
-        this.logger.log(LogMessages.TWILIO_SERVICE_INITIALIZED);
+        try {
+            this.verifyServiceSid = verifyServiceSid;
+            this.client = new Twilio(accountSid, authToken);
+            this.initialized = true;
+            this.logger.log(LogMessages.TWILIO_SERVICE_INITIALIZED);
+        } catch (error) {
+            this.logger.error('Failed to initialize Twilio Verify Service', error);
+            this.logger.warn('OTP verification will be disabled.');
+        }
     }
 
     /**
@@ -41,6 +47,14 @@ export class TwilioVerifyService implements InterfaceTwilioVerifyService {
        * @returns TwilioResponseObject
        */
     async sendAVerificationToken(toNumber: string): Promise<TwilioVerifyServiceResponse> {
+        if (!this.initialized || !this.client || !this.verifyServiceSid) {
+            this.logger.warn('Twilio Verify Service is not initialized. Cannot send OTP.');
+            throw new BusinessException(
+                'OTP service is not available. Twilio configuration is missing.',
+                'TWILIO_SERVICE_NOT_AVAILABLE',
+            );
+        }
+
         try {
             const verification = await this.client.verify.v2
                 .services(this.verifyServiceSid)
@@ -107,6 +121,14 @@ export class TwilioVerifyService implements InterfaceTwilioVerifyService {
         //         'TWILIO_VERIFICATION_PHONE_INVALID',
         //     );
         // }
+
+        if (!this.initialized || !this.client || !this.verifyServiceSid) {
+            this.logger.warn('Twilio Verify Service is not initialized. Cannot verify OTP.');
+            throw new BusinessException(
+                'OTP verification service is not available. Twilio configuration is missing.',
+                'TWILIO_SERVICE_NOT_AVAILABLE',
+            );
+        }
 
         this.logger.log(`Checking verification for phone number: ${toNumber} with code: ${code}`);
 

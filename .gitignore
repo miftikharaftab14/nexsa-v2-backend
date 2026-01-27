@@ -57,3 +57,9 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 serviceAccountKey.json
+
+# Infrastructure parameter files (may contain sensitive values)
+infra/prod/parameters.json
+infra/prod/*.parameters.json
+infra/prod/*.env
+infra/.env.infra

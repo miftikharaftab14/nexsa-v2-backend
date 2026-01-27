@@ -23,18 +23,27 @@ const dataSourceOptions: DataSourceOptions = {
   migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   synchronize: false,
   logging: process.env.NODE_ENV === 'development',
+  // Enable SSL for RDS connections (required for AWS RDS)
+  ssl: process.env.POSTGRES_HOST && process.env.POSTGRES_HOST !== 'localhost' && process.env.POSTGRES_HOST !== 'db'
+    ? { rejectUnauthorized: false }
+    : false,
 };
 
 // Export for NestJS application with ConfigService
 export const getDataSourceOptions = (configService: ConfigService): DataSourceOptions => {
+  const host = configService.get<string>('POSTGRES_HOST');
+  const isLocalhost = host === 'localhost' || host === 'db';
+  
   return {
     ...dataSourceOptions,
-    host: configService.get<string>('POSTGRES_HOST'),
+    host,
     port: configService.get<number>('POSTGRES_PORT'),
     username: configService.get<string>('POSTGRES_USER'),
     password: configService.get<string>('POSTGRES_PASSWORD'),
     database: configService.get<string>('POSTGRES_DB'),
     logging: configService.get<string>('NODE_ENV') === 'development',
+    // Enable SSL for RDS connections (required for AWS RDS)
+    ssl: !isLocalhost ? { rejectUnauthorized: false } : false,
   };
 };
 
