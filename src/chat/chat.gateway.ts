@@ -51,7 +51,12 @@ import { DataSource } from 'typeorm';
     origin: '*',
     methods: ['GET', 'POST'],
     credentials: true,
+    allowedHeaders: ['authorization', 'content-type'],
   },
+  transports: ['websocket', 'polling'], // Prefer websocket for React Native compatibility
+  allowEIO3: true, // Allow Engine.IO v3 clients
+  pingTimeout: 60000,
+  pingInterval: 25000,
 })
 export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
