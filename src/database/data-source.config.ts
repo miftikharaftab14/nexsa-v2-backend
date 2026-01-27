@@ -12,6 +12,16 @@ if (existsSync(envPath)) {
   config();
 }
 
+/**
+ * Determines if SSL should be enabled for the database connection.
+ * SSL is required for AWS RDS but not for localhost/docker-compose connections.
+ */
+const shouldEnableSSL = (host: string | undefined): boolean | { rejectUnauthorized: false } => {
+  if (!host) return false;
+  const localhostHosts = ['localhost', 'db', '127.0.0.1'];
+  return localhostHosts.includes(host) ? false : { rejectUnauthorized: false };
+};
+
 const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
   host: process.env.POSTGRES_HOST || 'localhost',
@@ -23,16 +33,15 @@ const dataSourceOptions: DataSourceOptions = {
   migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   synchronize: false,
   logging: process.env.NODE_ENV === 'development',
-  // Enable SSL for RDS connections (required for AWS RDS)
-  ssl: process.env.POSTGRES_HOST && process.env.POSTGRES_HOST !== 'localhost' && process.env.POSTGRES_HOST !== 'db'
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: shouldEnableSSL(process.env.POSTGRES_HOST),
 };
 
-// Export for NestJS application with ConfigService
+/**
+ * Gets TypeORM DataSource options using ConfigService.
+ * Used by NestJS application for dependency injection.
+ */
 export const getDataSourceOptions = (configService: ConfigService): DataSourceOptions => {
   const host = configService.get<string>('POSTGRES_HOST');
-  const isLocalhost = host === 'localhost' || host === 'db';
   
   return {
     ...dataSourceOptions,
@@ -42,16 +51,20 @@ export const getDataSourceOptions = (configService: ConfigService): DataSourceOp
     password: configService.get<string>('POSTGRES_PASSWORD'),
     database: configService.get<string>('POSTGRES_DB'),
     logging: configService.get<string>('NODE_ENV') === 'development',
-    // Enable SSL for RDS connections (required for AWS RDS)
-    ssl: !isLocalhost ? { rejectUnauthorized: false } : false,
+    ssl: shouldEnableSSL(host),
   };
 };
 
-// Factory for asynchronous injection
+/**
+ * Factory function for creating a DataSource instance.
+ * Used for asynchronous dependency injection in NestJS.
+ */
 export const dataSourceFactory = (configService: ConfigService): DataSource => {
   const options = getDataSourceOptions(configService);
   return new DataSource(options);
 };
 
-// Export for CLI usage
+/**
+ * Default DataSource instance for CLI usage (migrations, seeds, etc.)
+ */
 export default new DataSource(dataSourceOptions);

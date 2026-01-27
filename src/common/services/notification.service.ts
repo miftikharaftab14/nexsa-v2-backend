@@ -12,25 +12,35 @@ export class NotificationService {
     this.initFirebase();
   }
 
-  private initFirebase() {
+  /**
+   * Initializes Firebase Admin SDK.
+   * Gracefully handles missing configuration - app can start without Firebase.
+   */
+  private initFirebase(): void {
     if (this.initialized) return;
+    
     try {
-      const serviceAccount: ServiceAccount = {
-        projectId: this.configService.get<string>('FIREBASE_PROJECT_ID'),
-        clientEmail: this.configService.get<string>('FIREBASE_CLIENT_EMAIL'),
-        privateKey: this.configService.get<string>('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n'),
-      };
+      const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
+      const clientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL');
+      const privateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
 
-      if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
+      if (!projectId || !clientEmail || !privateKey) {
         this.logger.warn(
           'Firebase configuration missing (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY). Push notifications will be disabled.',
         );
         return;
       }
 
+      const serviceAccount: ServiceAccount = {
+        projectId,
+        clientEmail,
+        privateKey,
+      };
+
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
+      
       this.initialized = true;
       this.logger.log('Firebase Admin initialized for push notifications');
     } catch (error) {
@@ -47,6 +57,14 @@ export class NotificationService {
    * @param body Notification body
    * @param data Optional additional data
    */
+  /**
+   * Send a push notification to one or more device tokens
+   * @param tokens Array of FCM device tokens
+   * @param title Notification title
+   * @param body Notification body
+   * @param data Optional additional data
+   * @throws InternalServerErrorException if notification sending fails
+   */
   async sendPushNotification(
     tokens: string[],
     title: string,
@@ -60,7 +78,12 @@ export class NotificationService {
         return;
       }
     }
-    if (!tokens || tokens.length === 0) return;
+    
+    if (!tokens || tokens.length === 0) {
+      this.logger.warn('No device tokens provided for push notification');
+      return;
+    }
+    
     try {
       await Promise.all(
         tokens.map(token =>
