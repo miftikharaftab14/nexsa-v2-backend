@@ -30,7 +30,7 @@ export class S3Service {
     }
 
     this.s3Client = new S3Client({
-      region,
+      region, // IMPORTANT: Must match the bucket's actual region, not the server region
       credentials: {
         accessKeyId,
         secretAccessKey,
@@ -38,8 +38,14 @@ export class S3Service {
       // Use virtual-hosted-style URLs (bucket.s3.region.amazonaws.com)
       // This is the default, but explicit for clarity
       forcePathStyle: false,
+      // Let AWS SDK automatically determine the correct endpoint based on region
+      // This ensures presigned URLs point to the correct regional endpoint
     });
     this.bucketName = bucketName;
+    
+    // Log configuration for debugging
+    this.logger.log(`S3 Service initialized - Bucket: ${bucketName}, Region: ${region}`);
+    this.logger.warn(`⚠️  Ensure AWS_REGION (${region}) matches your S3 bucket's actual region to avoid 301 redirects`);
   }
 
   async uploadFile(
@@ -126,7 +132,10 @@ export class S3Service {
         Key: key,
       });
       const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+      
       // Ensure presigned URLs use HTTPS (fix for 301 redirects)
+      // The AWS SDK should already generate URLs with the correct region endpoint
+      // based on the S3Client region configuration
       return url.replace(/^http:/, 'https:');
     } catch (error) {
       this.logger.error(
@@ -207,8 +216,13 @@ export class S3Service {
           ]);
 
           // Ensure presigned URLs use HTTPS (fix for 301 redirects)
+          // The AWS SDK should already generate URLs with the correct region endpoint
+          // based on the S3Client region configuration
           const normalizedPresignedUrl = presignedUrl.replace(/^http:/, 'https:');
           const normalizedGetUrl = getUrl.replace(/^http:/, 'https:');
+
+          // Log for debugging (remove in production if too verbose)
+          this.logger.debug(`Generated presigned URL for ${file.fileName} (region: ${region}): ${normalizedPresignedUrl.substring(0, 100)}...`);
 
           // Generate CloudFront URL
           const cloudFrontDomain = this.configService.get<string>('CLOUDFRONT_DOMAIN');
