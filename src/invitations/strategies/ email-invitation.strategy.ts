@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { InvitationMethod } from 'src/common/enums/contact-invitation.enum';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { IEmailService } from 'src/common/interfaces/email-service.interface';
+import { BusinessException } from 'src/common/exceptions/business.exception';
 
 @Injectable()
 export class EmailInvitationStrategy implements IInvitationStrategy {
@@ -15,8 +16,15 @@ export class EmailInvitationStrategy implements IInvitationStrategy {
   ) { }
 
   async sendInvitation(contact: Contact, inviteToken: string): Promise<void> {
-    const message = this.getInvitationMessage(contact, inviteToken);
-    await this.emailService.sendEmail(contact.email, 'Invitation to Connect', message);
+    try {
+      const message = this.getInvitationMessage(contact, inviteToken);
+      await this.emailService.sendEmail(contact.email, 'Invitation to Connect', message);
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      throw error;
+    }
   }
 
   getInvitationMessage(contact: Contact, inviteToken: string): string {

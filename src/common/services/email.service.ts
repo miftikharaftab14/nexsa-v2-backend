@@ -9,16 +9,44 @@ import { getEmailConfig } from './email.config';
 @Injectable()
 export class EmailService implements IEmailService {
   private readonly logger = new Logger(LogContexts.EMAIL);
-  private readonly transporter: Transporter;
+  private readonly transporter: Transporter | null = null;
+  private initialized = false;
 
   constructor(private readonly configService: ConfigService) {
-    this.transporter = createTransport(getEmailConfig(this.configService));
-    this.logger.log('Email transporter initialized', getEmailConfig(this.configService));
-    this.logger.log('test',configService.get<string>('NODE_ENV'));
+    const cfg = getEmailConfig(this.configService);
+
+    // In non-dev mode, fail fast if config is missing.
+    const nodeEnv = this.configService.get<string>('NODE_ENV');
+    if (nodeEnv !== 'development') {
+      const host = (cfg as any)?.host as string | undefined;
+      const port = (cfg as any)?.port as number | undefined;
+      const user = (cfg as any)?.auth?.user as string | undefined;
+      const pass = (cfg as any)?.auth?.pass as string | undefined;
+
+      if (!host || !port || !user || !pass) {
+        this.logger.warn(
+          'Email config is missing; email sending will be disabled.',
+        );
+        return;
+      }
+    }
+
+    this.transporter = createTransport(cfg);
+    this.initialized = true;
+
+    // Don't log full config (it contains credentials)
+    this.logger.log('Email transporter initialized');
   }
 
   async sendEmail(to: string, subject: string, html: string): Promise<void> {
     try {
+      if (!this.initialized || !this.transporter) {
+        throw new BusinessException(
+          'Email service is not available. Email configuration is missing.',
+          'EMAIL_SERVICE_NOT_AVAILABLE',
+        );
+      }
+
       const mailOptions = {
         from: this.configService.get<string>('EMAIL_FROM'),
         to,
@@ -33,6 +61,9 @@ export class EmailService implements IEmailService {
         `Failed to send email to ${to}`,
         error instanceof Error ? error.message : 'Unknown error',
       );
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       throw new BusinessException('Failed to send email', 'EMAIL_SEND_FAILED');
     }
   }
@@ -51,6 +82,9 @@ export class EmailService implements IEmailService {
         `Failed to send templated email to ${to}`,
         error instanceof Error ? error.message : 'Unknown error',
       );
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       throw new BusinessException('Failed to send templated email', 'EMAIL_SEND_FAILED');
     }
   }

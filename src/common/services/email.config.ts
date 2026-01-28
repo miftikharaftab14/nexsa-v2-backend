@@ -10,7 +10,7 @@ export function getEmailConfig(configService: ConfigService): SMTPTransport.Opti
       }
     : {
         host: configService.get<string>('EMAIL_HOST'),
-        port: configService.get<number>('EMAIL_PORT'),
+        port: Number(configService.get<string>('EMAIL_PORT')),
         secure: configService.get<string>('EMAIL_SECURE') === 'true',
         auth: {
           user: configService.get<string>('EMAIL_USER'),
