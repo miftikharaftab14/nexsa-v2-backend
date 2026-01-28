@@ -5,6 +5,7 @@ import { BusinessException } from '../exceptions/business.exception';
 import { LogMessages } from '../enums/logging.enum';
 import { Messages } from '../enums/messages.enum';
 import { InterfaceTwilioMessagingService, TwilioMessagingServiceResponse } from '../interfaces/twilio-messaging-service.interface';
+import { normalizePhoneToE164 } from '../utils/phone.util';
 
 @Injectable()
 export class TwilioMessagingService implements InterfaceTwilioMessagingService {
@@ -73,13 +74,17 @@ export class TwilioMessagingService implements InterfaceTwilioMessagingService {
             );
         }
 
-        this.logger.log(`Checking verification for phone number: ${toNumber} with message body: ${messageBody}`);
+        const normalizedTo = normalizePhoneToE164(toNumber, 'US');
+
+        this.logger.log(
+            `Checking verification for phone number: ${normalizedTo} with message body: ${messageBody}`,
+        );
 
         try {
             const message = await this.client.messages
                 .create({
                     body: messageBody,
-                    to: toNumber,
+                    to: normalizedTo,
                     from: this.fromNumber,
                     messagingServiceSid: this.messagingServiceSid
                 })
@@ -95,7 +100,7 @@ export class TwilioMessagingService implements InterfaceTwilioMessagingService {
             const err = error as { code?: string; message?: string; stack?: string };
 
             this.logger.error(
-                `Failed to send SMS for ${toNumber}. Twilio error code: ${err.code}, message: ${err.message}`,
+                `Failed to send SMS for ${normalizedTo}. Twilio error code: ${err.code}, message: ${err.message}`,
                 err.stack,
             );
 

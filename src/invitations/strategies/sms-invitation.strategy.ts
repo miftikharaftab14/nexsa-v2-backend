@@ -31,6 +31,9 @@ export class SMSInvitationStrategy implements IInvitationStrategy {
       // 3. Send via messaging service (TwilioService)
       await this.messagingService.sendSMSWithMessagingService(contact.phone_number, message);
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       // Handle specific errors
       this.logger.error('Failed to send SMS invitation', error);
       throw new BusinessException(
