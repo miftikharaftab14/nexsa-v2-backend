@@ -1,9 +1,9 @@
 # Install pnpm
-FROM node:22-alpine AS pnpm-installer
+FROM public.ecr.aws/docker/library/node:22-alpine AS pnpm-installer
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Build dependencies
-FROM node:22-alpine AS deps
+FROM public.ecr.aws/docker/library/node:22-alpine AS deps
 WORKDIR /usr/src/app
 
 # Install pnpm
@@ -16,7 +16,7 @@ COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 
 # Build application
-FROM node:22-alpine AS build
+FROM public.ecr.aws/docker/library/node:22-alpine AS build
 WORKDIR /usr/src/app
 
 # Install pnpm
@@ -33,7 +33,7 @@ COPY . .
 RUN pnpm run build
 
 # Runtime image (production)
-FROM node:22-alpine AS runtime
+FROM public.ecr.aws/docker/library/node:22-alpine AS runtime
 WORKDIR /usr/src/app
 
 # Install pnpm
