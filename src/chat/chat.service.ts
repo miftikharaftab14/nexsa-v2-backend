@@ -287,10 +287,7 @@ export class ChatService {
                       notificationTitle,
                       notificationBody,
                       {
-                        id:
-                          user.role === UserRole.CUSTOMER
-                            ? contact.id.toString()
-                            : user.id.toString() || '',
+                        id: contact.id.toString(),
                         userName:
                           user.role === UserRole.CUSTOMER ? contact.full_name : user.username,
                         avatar: '',

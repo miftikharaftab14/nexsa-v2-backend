@@ -274,7 +274,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 receiverTokens,
                 notificationTitle,
                 notificationBody, {
-                  id: sender.role === UserRole.CUSTOMER ? contact.id.toString() : contact.seller_id.toString() || '',
+                  id: contact.id.toString(),
                 userName: sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
                 avatar:  '',
                 type: 'individual',
@@ -514,10 +514,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                         notificationTitle,
                         notificationBody,
                         {
-                          id:
-                            sender.role === UserRole.CUSTOMER
-                              ? contact.id.toString()
-                              : sender.id.toString() || '',
+                          id: contact.id.toString(),
                           userName:
                             sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
                           avatar: '',
@@ -594,10 +591,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                       notificationTitle,
                       notificationBody,
                       {
-                        id:
-                          sender.role === UserRole.CUSTOMER
-                            ? contact.id.toString()
-                            : sender.id.toString() || '',
+                        id: contact.id.toString(),
                         userName:
                           sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
                         avatar: '',
@@ -792,7 +786,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 receiverTokens,
                 notificationTitle,
                 notificationBody, {
-                id: sender.role === UserRole.CUSTOMER ? contact.id.toString() : contact.seller_id.toString() || '',
+                id: contact.id.toString(),
                 userName: sender.role === UserRole.CUSTOMER ? contact.full_name : sender.username,
                 avatar:  '',
                 type: 'individual',
