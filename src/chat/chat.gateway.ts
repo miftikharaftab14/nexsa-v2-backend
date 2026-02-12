@@ -12,6 +12,7 @@ import { Server } from 'socket.io';
 import {
   Logger,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   UnauthorizedException,
   Inject,
@@ -187,6 +188,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       const contactResp = await this.contactService.findOne(data.contactId);
       const contact = contactResp?.data;
       if (!contact) throw new NotFoundException('Chat/contact not found');
+
+      const isParticipant =
+        user.id === contact.seller_id || user.id === contact.invited_user_id;
+      if (!isParticipant) {
+        throw new ForbiddenException(
+          'You are not a participant of this chat. Message not sent.',
+        );
+      }
 
       const mediaCont: Record<number, string> = {};
       const messages: Message[] = [];
