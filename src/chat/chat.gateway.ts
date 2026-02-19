@@ -197,6 +197,12 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         );
       }
 
+      if (user.id === contact.seller_id && !contact.invited_user_id) {
+        throw new BadRequestException(
+          'Cannot send message: customer has not accepted the invitation yet.',
+        );
+      }
+
       const mediaCont: Record<number, string> = {};
       const messages: Message[] = [];
 
@@ -240,8 +246,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       // Determine receiver
       const receiverId =
         user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+      if (!receiverId) {
+        this.logger.warn(
+          `Cannot emit receive_message: contact ${contact.id} has no invited_user_id`,
+        );
+      }
       const receiverSocketId = await this.redis.get(
-        `${this.redisPrefix}:user_socket:${receiverId}`,
+        `${this.redisPrefix}:user_socket:${receiverId?.toString() ?? ''}`,
       );
       const senderSocketId = await this.redis.get(`${this.redisPrefix}:user_socket:${user.id}`);
       const broadcastReply = await this.messageRepository.findOne({
@@ -447,8 +458,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
           const { data: contact } = await this.contactService.findOne(contactId);
           const receiverId =
             user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
+          if (!receiverId) {
+            this.logger.warn(
+              `Skipping broadcast to contact ${contact.id}: no invited_user_id (customer has not accepted invitation)`,
+            );
+            return;
+          }
           const receiverSocketId = await this.redis.get(
-            `${this.redisPrefix}:user_socket:${receiverId}`,
+            `${this.redisPrefix}:user_socket:${receiverId.toString()}`,
           );
 
           const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, user.id);
@@ -743,12 +760,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       const mediaUrl = await this.fileService.getPresignedUrl(galleryImage.mediaFileId);
       const receiverId =
         user.id === contact.seller_id ? contact.invited_user_id : contact.seller_id;
-      const reciver = await this.userService.findOne(receiverId);
-      const receiverSocketId = await this.redis.get(
-        `${this.redisPrefix}:user_socket:${receiverId}`,
-      );
+      if (!receiverId) {
+        this.logger.warn(
+          `Cannot determine receiver for product chat contact ${contact.id}: no invited_user_id`,
+        );
+      }
+      const reciver = receiverId ? await this.userService.findOne(receiverId) : null;
+      const receiverSocketId = receiverId
+        ? await this.redis.get(`${this.redisPrefix}:user_socket:${receiverId.toString()}`)
+        : null;
 
-      const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, user.id);
+      const isReceiverBlocked = receiverId
+        ? await this.blocksService.isBlocked(receiverId, user.id)
+        : true;
       this.logger.log(`Product chat blocking check: receiver ${receiverId} blocked sender ${user.id}: ${isReceiverBlocked}`);
 
       if (receiverSocketId && !isReceiverBlocked) {
@@ -846,12 +870,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   public async emitMessageToUser(
     contactId: bigint,
-    receiverId: bigint,
+    receiverId: bigint | null,
     sender: User,
     contact: Contact,
     message: Message,
     mediaUrl: string | null,
   ) {
+    if (!receiverId) {
+      this.logger.warn(
+        `Cannot emit to contact ${contactId}: no receiverId (customer has not accepted invitation)`,
+      );
+      return;
+    }
 
     const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, sender.id);
     this.logger.log(`EmitMessageToUser blocking check: receiver ${receiverId} blocked sender ${sender.id}: ${isReceiverBlocked}`);

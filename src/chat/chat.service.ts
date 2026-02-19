@@ -237,6 +237,13 @@ export class ChatService {
             const receiverId =
               senderId === contact.seller_id ? contact.invited_user_id : contact.seller_id;
 
+            if (!receiverId) {
+              this.logger.log(
+                `Skipping broadcast to contact ${contact.id}: no invited_user_id (customer has not accepted invitation)`,
+              );
+              continue;
+            }
+
             // Check if user blocked receiver or receiver blocked sender
             const isReceiverBlocked = await this.blocksService.isBlocked(receiverId, senderId);
             const isSenderBlocked = await this.blocksService.isBlocked(senderId, receiverId);
