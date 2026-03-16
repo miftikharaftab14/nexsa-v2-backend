@@ -74,7 +74,8 @@ export class AuthService {
 
       const user = await this.userService.create(dto);
       this.logger.log(LogMessages.AUTH_SIGNUP_SUCCESS, dto.phone_number);
-      return user;
+      const inviteUrl = this.userService.getInviteUrl(user);
+      return { ...user, inviteUrl } as User & { inviteUrl: string | null };
     } catch (error: unknown) {
       if (error instanceof BusinessException) {
         throw error;
@@ -92,7 +93,7 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<{
     message: string;
-    user: User;
+    user: User & { inviteUrl: string | null };
     invitations: Invitation[] | null;
     contacts: Contact[] | null;
     token: string | null;
@@ -108,6 +109,15 @@ export class AuthService {
         if (!dto.deepLinktoken)
           invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number);
         else invitaions = await this.invitaionService.getInvitationByToken(dto.deepLinktoken);
+
+        // If seller_id is provided, narrow invitations down to that seller
+        if (invitaions && invitaions.length > 0 && dto.seller_id) {
+          invitaions = invitaions.filter(invitation => {
+            const sellerIdFromInvitation =
+              (invitation as any).seller_id ?? invitation.contact?.seller_id;
+            return Number(sellerIdFromInvitation) === dto.seller_id;
+          });
+        }
 
         if (invitaions && invitaions.length > 0) {
           if (!user) {
@@ -137,10 +147,15 @@ export class AuthService {
         }
         if (dto.role === UserRole.CUSTOMER) {
           contacts = await this.contactService.findAllByInvitedUserId(user.id);
+          // If seller_id is provided, only return contacts for that seller
+          if (dto.seller_id && contacts) {
+            contacts = contacts.filter(contact => Number(contact.seller_id) === dto.seller_id);
+          }
         }
+        const inviteUrl = this.userService.getInviteUrl(user);
         return {
           message: LogMessages.AUTH_LOGIN_SUCCESS,
-          user: user,
+          user: { ...user, inviteUrl },
           invitations: invitaions,
           contacts: contacts,
           token: token,

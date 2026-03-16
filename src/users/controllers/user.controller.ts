@@ -134,16 +134,19 @@ export class UserController {
   @ApiResponse(_404_users)
   @ApiResponse(_401_users)
   @ApiResponse(_403_users)
-  async findOne(@Param('id') id: string): Promise<CustomApiResponse<User>> {
+  async findOne(
+    @Param('id') id: string,
+  ): Promise<CustomApiResponse<User & { inviteUrl: string | null }>> {
     const user = await this.userService.findOne(+id);
     if (!user) {
       throw new NotFoundException(Messages.USER_NOT_FOUND);
     }
+    const inviteUrl = this.userService.getInviteUrl(user);
     return {
       success: true,
       message: Messages.USER_FETCHED,
       status: HttpStatus.OK,
-      data: user,
+      data: { ...user, inviteUrl },
     };
   }
 
@@ -155,12 +158,14 @@ export class UserController {
   @ApiResponse(_401_users)
   @ApiResponse(_403_users)
   async makeActive(@CurrentUser() currentUser: CurrentUserType): Promise<CustomApiResponse<any>> {
-    const user = await this.userService.makeActive(currentUser.userId);
+    await this.userService.makeActive(currentUser.userId);
+    const user = await this.userService.findOne(Number(currentUser.userId));
+    const inviteUrl = user ? this.userService.getInviteUrl(user) : null;
     return {
       success: true,
       message: Messages.USER_UPDATED,
       status: HttpStatus.OK,
-      data: user,
+      data: user ? { ...user, inviteUrl } : null,
     };
   }
   @Patch('user-flags')
@@ -175,11 +180,12 @@ export class UserController {
     @Body() updateUserFlagsDto: UpdateUserFlagsDto,
   ): Promise<CustomApiResponse<any>> {
     const user = await this.userService.userFlagsUpdate(currentUser.userId, updateUserFlagsDto);
+    const inviteUrl = this.userService.getInviteUrl(user);
     return {
       success: true,
       message: Messages.USER_UPDATED,
       status: HttpStatus.OK,
-      data: user,
+      data: { ...user, inviteUrl },
     };
   }
 
@@ -204,21 +210,22 @@ export class UserController {
       }),
     )
     file: Express.Multer.File,
-  ): Promise<CustomApiResponse<User>> {
+  ): Promise<CustomApiResponse<User & { inviteUrl: string | null }>> {
     const user = await this.userService.update(+id, { ...updateUserDto, image: file });
     if (!user) {
       throw new NotFoundException(Messages.USER_NOT_FOUND);
     }
+    const inviteUrl = this.userService.getInviteUrl(user);
     return {
       success: true,
       message: Messages.USER_UPDATED,
       status: HttpStatus.OK,
-      data: user,
+      data: { ...user, inviteUrl },
     };
   }
 
   @Delete('confirm')
-  @ApiBearerAuth('JWT-auth') // Swagger JWT header name
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: Descriptions.DELETE_USER_SUMMARY })
   @ApiResponse(_200_user_delete)
   @ApiResponse(_404_users)
@@ -227,8 +234,6 @@ export class UserController {
   async deleteConfirm(
     @CurrentUser() currentUser: CurrentUserType,
   ): Promise<CustomApiResponse<null>> {
-    console.log({ currentUser });
-
     await this.userService.softDelete(currentUser?.userId);
     return {
       success: true,
@@ -237,6 +242,7 @@ export class UserController {
       data: null,
     };
   }
+
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: Descriptions.DELETE_USER_SUMMARY })
@@ -251,6 +257,25 @@ export class UserController {
       message: Messages.USER_DELETED,
       status: HttpStatus.OK,
       data: null,
+    };
+  }
+
+  @Post('invite-link')
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Generate or retrieve seller invite link' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Seller invite link generated or retrieved successfully',
+  })
+  async generateInviteLink(
+    @CurrentUser() currentUser: CurrentUserType,
+  ): Promise<CustomApiResponse<{ link: string; invite_url: string }>> {
+    const result = await this.userService.generateOrGetSellerInviteLink(currentUser.userId);
+    return {
+      success: true,
+      message: 'Seller invite link generated successfully',
+      status: HttpStatus.OK,
+      data: result,
     };
   }
 }

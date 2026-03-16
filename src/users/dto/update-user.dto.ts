@@ -37,6 +37,14 @@ export class UpdateUserDto {
   link_name?: string;
 
   @ApiProperty({
+    description: 'Invite path/slug for seller (no base URL). Used to build full inviteUrl.',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  invite_url?: string;
+
+  @ApiProperty({
     description: Descriptions.PHONE_DESC,
     example: Examples.PHONE,
     required: false,

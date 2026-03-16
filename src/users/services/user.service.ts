@@ -13,6 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { ExtendedUser } from '../interfaces/user.interface';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { UpdateUserFlagsDto } from '../dto/UpdateUserFlags.dto';
+import { Messages } from 'src/common/enums/messages.enum';
 
 /**
  * Service responsible for managing user-related operations including CRUD operations,
@@ -54,6 +55,13 @@ export class UserService {
     try {
       this.logger.debug(LogMessages.USER_CREATE_ATTEMPT, data.phone_number);
       const user = await this.userRepo.create(data);
+
+      // Automatically generate invite path for sellers (stored in invite_url only; no base URL in DB)
+      if (user.role === UserRole.SELLER && !user.invite_url) {
+        const { invite_url } = await this.generateOrGetSellerInviteLink(user.id);
+        user.invite_url = invite_url;
+      }
+
       this.logger.log(LogMessages.USER_CREATE_SUCCESS, user.id);
       return user;
     } catch (error) {
@@ -172,6 +180,7 @@ export class UserService {
         ...(updateUserDto.link && { link: updateUserDto.link }),
         ...(updateUserDto.is_deleted && { is_deleted: updateUserDto.is_deleted }),
         ...(updateUserDto.link_name && { link_name: updateUserDto.link_name }),
+        ...(updateUserDto.invite_url && { invite_url: updateUserDto.invite_url }),
         ...(updateUserDto.first_message_send && {
           first_message_send: updateUserDto.first_message_send,
         }),
@@ -420,5 +429,87 @@ export class UserService {
   }
   userFlagsUpdate(userId: bigint, updateUserFlagsDto: UpdateUserFlagsDto) {
     return this.userRepo.userFlagsUpdate(userId.toString(), updateUserFlagsDto);
+  }
+
+  /**
+   * Builds full invite URL from stored path (invite_url). Base URL is not stored in DB.
+   * Returns null for non-sellers or when invite_url is not set.
+   */
+  getInviteUrl(user: User | null): string | null {
+    if (!user?.invite_url) return null;
+    const baseUrl =
+      this.configService.get<string>('SELLER_INVITE_BASE_URL') ||
+      this.configService.get<string>('APP_URL') ||
+      '';
+    if (!baseUrl) return user.invite_url;
+    return `${baseUrl.replace(/\/+$/, '')}/${user.invite_url}`;
+  }
+
+  /**
+   * Generates (or returns existing) invite path for a seller. Only the path is stored in DB.
+   */
+  async generateOrGetSellerInviteLink(
+    userId: bigint | number,
+  ): Promise<{ link: string; invite_url: string }> {
+    const repository = this.dataSource.getRepository(User);
+    const user = await repository.findOne({
+      where: { id: BigInt(userId), is_deleted: false },
+    });
+
+    if (!user) {
+      throw new BusinessException(LogMessages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+    }
+
+    if (user.role !== UserRole.SELLER) {
+      throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+        role: 'Only sellers can have invite links',
+      });
+    }
+
+    // If path already stored, return full URL + path (no base URL in DB)
+    if (user.invite_url) {
+      return { link: this.getInviteUrl(user) ?? user.invite_url, invite_url: user.invite_url };
+    }
+
+    const baseSlugSource = user.username || user.email || user.phone_number || 'seller';
+    const slugBase = baseSlugSource
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    const invite_url = await this.generateUniqueLinkName(slugBase || 'seller', repository);
+
+    // Store only the path in DB (no base URL)
+    user.invite_url = invite_url;
+    await repository.save(user);
+
+    const link = this.getInviteUrl(user) ?? invite_url;
+    return { link, invite_url };
+  }
+
+  private async generateUniqueLinkName(base: string, repository: any): Promise<string> {
+    let attempt = 0;
+    const maxAttempts = 10;
+
+    while (attempt < maxAttempts) {
+      // Always append a short random suffix so invite_url is not identical to username/email
+      const suffix = `-${Math.random().toString(36).substring(2, 6)}`;
+      const candidate = `${base}${suffix}`;
+
+      const existing = await repository.findOne({
+        where: { invite_url: candidate as unknown as string },
+      });
+
+      if (!existing) {
+        return candidate;
+      }
+
+      attempt += 1;
+    }
+
+    // Fallback to a purely random slug if collisions keep happening
+    return Math.random().toString(36).substring(2, 10);
   }
 }

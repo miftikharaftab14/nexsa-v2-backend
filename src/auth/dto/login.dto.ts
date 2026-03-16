@@ -1,9 +1,10 @@
-import { IsNotEmpty, IsEnum, Allow, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsEnum, Allow, IsOptional, IsNumber, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Examples } from 'src/common/enums/examples.enum';
 import { Descriptions } from 'src/common/enums/descriptions.enum';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { IsUSPhoneNumber } from 'src/common/validators/phone-number.validator';
+import { Type } from 'class-transformer';
 
 export class LoginDto {
   @ApiProperty({
@@ -57,4 +58,15 @@ export class LoginDto {
   })
   @Allow()
   deepLinktoken?: string;
+
+  @ApiProperty({
+    description: Descriptions.SELLER_ID_DESC,
+    example: Examples.USER_ID,
+    required: false,
+  })
+  @ValidateIf((o: LoginDto) => o.role === UserRole.CUSTOMER)
+  @IsNumber()
+  @Type(() => Number)
+  @IsOptional()
+  seller_id?: number;
 }
