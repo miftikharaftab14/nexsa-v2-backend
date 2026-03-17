@@ -135,6 +135,42 @@ export class AuthService {
       }
 
       if (user) {
+        // For customer logins with a specific seller, ensure an invite exists
+        if (dto.role === UserRole.CUSTOMER && dto.seller_id) {
+          try {
+            const contact = await this.contactService.findBySellerAndCustomer(
+              dto.seller_id,
+              BigInt(user.id),
+            );
+
+            if (contact) {
+              const existingInvites =
+                await this.invitaionService.getInvitationsByContactId(Number(contact.id));
+
+              const hasAnyInviteForThisSeller = (existingInvites || []).some(invitation => {
+                const sellerIdFromInvitation =
+                  (invitation as any).seller_id ?? invitation.contact?.seller_id;
+                return Number(sellerIdFromInvitation) === dto.seller_id;
+              });
+
+              if (!hasAnyInviteForThisSeller) {
+                const newInvitation = await this.invitaionService.createInvitation(
+                  contact as any,
+                );
+                if (!invitaions) {
+                  invitaions = [];
+                }
+                invitaions.push(newInvitation);
+              }
+            }
+          } catch (error) {
+            this.logger.error(
+              'Failed to ensure invitation exists for customer login with seller_id',
+              error,
+            );
+          }
+        }
+
         const token = this.jwtService.sign({ sub: user.id, role: user.role });
         this.logger.log(LogMessages.AUTH_LOGIN_SUCCESS, dto.phone_number);
         if (dto.deviceToken) {

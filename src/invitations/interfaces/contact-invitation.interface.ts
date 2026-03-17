@@ -10,6 +10,7 @@ export interface IInvitationService {
   getInvitationByNumber(phoneNumber: string): Promise<Invitation[]>;
   getInvitationById(id: bigint): Promise<Invitation>;
   getInvitationsByContactId(contactId: number): Promise<Invitation[]>;
+  getAcceptedInvitationsBySellerId(sellerId: number | bigint): Promise<Invitation[]>;
   updateInvitationStatusByToken(token: string, status: InvitationStatus): Promise<Invitation>;
   updateInvitationStatusById(invite_id: bigint, status: InvitationStatus): Promise<Invitation>;
   deleteInvitationsByContactId(contactId: number): Promise<void>;

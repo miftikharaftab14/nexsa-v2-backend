@@ -6,4 +6,5 @@ export interface IContactUpdate {
   update(id: number, updateContactDto: UpdateContactDto): Promise<ApiResponse<Contact>>;
   // Add other method signatures as needed
   findAllByInvitedUserId(id: bigint): Promise<Contact[]>;
+  findBySellerAndCustomer(sellerId: number, customerId: bigint): Promise<Contact | null>;
 }

@@ -389,6 +389,32 @@ export class InvitationService implements IInvitationService {
     }
   }
 
+  async getAcceptedInvitationsBySellerId(sellerId: number | bigint): Promise<Invitation[]> {
+    try {
+      this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, sellerId);
+
+      const invitations = await this.invitationRepo.find({
+        where: {
+          status: InvitationStatus.PENDING,
+          seller: { id: BigInt(sellerId) },
+        },
+        relations: ['contact', 'contact.seller'],
+        order: { created_at: 'DESC' },
+      });
+
+      this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, sellerId);
+      return invitations;
+    } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
+      throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
   async updateInvitationStatusByToken(
     token: string,
     status: InvitationStatus,
