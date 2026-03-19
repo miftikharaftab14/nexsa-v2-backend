@@ -51,6 +51,7 @@ import {
 import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { CurrentUserType } from 'src/common/types/current-user.interface';
 import { UpdateUserFlagsDto } from '../dto/UpdateUserFlags.dto';
+import { UpdateInviteLinkDto } from '../dto/update-invite-link.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -274,6 +275,29 @@ export class UserController {
     return {
       success: true,
       message: 'Seller invite link generated successfully',
+      status: HttpStatus.OK,
+      data: result,
+    };
+  }
+
+  @Patch('invite-link')
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Update seller invite URL (path/slug) manually' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Seller invite link updated successfully',
+  })
+  async updateInviteLink(
+    @CurrentUser() currentUser: CurrentUserType,
+    @Body() updateInviteLinkDto: UpdateInviteLinkDto,
+  ): Promise<CustomApiResponse<{ link: string; invite_url: string }>> {
+    const result = await this.userService.updateInviteUrlForSeller(
+      currentUser.userId,
+      updateInviteLinkDto,
+    );
+    return {
+      success: true,
+      message: 'Seller invite link updated successfully',
       status: HttpStatus.OK,
       data: result,
     };

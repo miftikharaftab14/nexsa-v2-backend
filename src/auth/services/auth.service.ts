@@ -16,6 +16,7 @@ import { IContactUpdate } from 'src/contacts/interfaces/IContactUpdate.interface
 import { ContactStatus } from 'src/common/enums/contact-status.enum';
 import { Invitation } from 'src/invitations/entities/invitation.entity';
 import { AcceptInviteDto } from '../dto/accept-invite.dto';
+import { InviteSellerDto } from '../dto/invite-seller.dto';
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { UserDeviceTokenService } from '../../users/services/user-device-token.service';
 import { NotificationService } from '../../common/services/notification.service';
@@ -268,6 +269,100 @@ export class AuthService {
     return { message: otpResult.message };
   }
 
+  async inviteSeller(
+    customerId: number,
+    dto: InviteSellerDto,
+  ): Promise<{ message: string; invitation: Invitation }> {
+    try {
+      const customer = await this.userService.findOne(customerId);
+      if (!customer) {
+        throw new BusinessException(Messages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+      }
+
+      if (customer.role !== UserRole.CUSTOMER) {
+        throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+          role: 'Only customers can invite sellers',
+        });
+      }
+
+      const seller = await this.userService.findOne(dto.seller_id);
+      if (!seller || seller.is_deleted) {
+        throw new BusinessException(Messages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+      }
+
+      if (seller.role !== UserRole.SELLER) {
+        throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+          role: 'Target user must be a seller',
+        });
+      }
+
+      const contactRepository = this.dataSource.getRepository(Contact);
+
+      let contact = await this.contactService.findBySellerAndCustomer(
+        dto.seller_id,
+        BigInt(customer.id),
+      );
+
+      if (!contact) {
+        contact = await contactRepository.save(
+          contactRepository.create({
+            seller_id: BigInt(dto.seller_id),
+            invited_user_id: BigInt(customer.id),
+            full_name: customer.username || '',
+            phone_number: customer.phone_number,
+            email: customer.email,
+            status: ContactStatus.NEW,
+          }),
+        );
+      }
+
+      const existingInvites =
+        await this.invitaionService.getInvitationsByContactId(Number(contact.id));
+
+      const pendingInvite = (existingInvites || []).find(
+        invitation => invitation.status === InvitationStatus.PENDING,
+      );
+
+      let invitation: Invitation;
+      if (pendingInvite) {
+        invitation = pendingInvite;
+      } else {
+        invitation = await this.invitaionService.createInvitation(contact as any);
+      }
+
+      try {
+        const sellerTokens = await this.userDeviceTokenService.getTokensByUser(BigInt(seller.id));
+        if (sellerTokens.length > 0) {
+          const fullName = customer.username || customer.phone_number || 'Customer';
+          await this.notificationService.sendPushNotification(
+            sellerTokens,
+            'New connection request',
+            `Customer ${fullName} wants to connect with you`,
+            {
+              screen: 'Contacts',
+            },
+          );
+        }
+      } catch (notifyError) {
+        this.logger.error('Failed to send push notification to seller for invite', notifyError);
+      }
+
+      return { message: 'Invitation sent to seller', invitation };
+    } catch (error: unknown) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(
+        'Failed to invite seller',
+        error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new BusinessException(Messages.INVITATION_CREATION_FAILED, 'INVITATION_CREATION_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
   async acceptInvite(dto: AcceptInviteDto): Promise<{ message: string; data: Invitation }> {
     this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, dto.invite_id);
 
@@ -291,15 +386,19 @@ export class AuthService {
       invited_user_id: Number(dto.user_id),
       status: ContactStatus.ACCEPTED,
     });
-    
+
     const contactRepository = this.dataSource.getRepository(Contact);
     const contact = await contactRepository.findOne({
       where: { id: BigInt(invitation.contact_id) },
     });
 
+    const userRepository = this.dataSource.getRepository(User);
+
+    const actorIsSeller =
+      sellerId && Number(dto.user_id) === Number(sellerId);
+
     if (sellerId) {
       try {
-        const userRepository = this.dataSource.getRepository(User);
         const seller = await userRepository.findOne({
           where: {
             id: BigInt(sellerId),
@@ -341,6 +440,51 @@ export class AuthService {
           notifyError,
         );
       }
+    }
+
+    // Send notification to customer (invited user) when seller accepts/rejects
+    try {
+      if (contact?.invited_user_id) {
+        const customer = await userRepository.findOne({
+          where: {
+            id: BigInt(contact.invited_user_id),
+            notification: true,
+            is_deleted: false,
+          },
+        });
+
+        if (customer) {
+          const customerTokens = await this.userDeviceTokenService.getTokensByUser(
+            BigInt(customer.id),
+          );
+
+          if (customerTokens.length > 0) {
+            const sellerName = invitation.seller?.username || 'Seller';
+            const customerMessage =
+              dto.invitation_status === InvitationStatus.ACCEPTED
+                ? `You have a new contact with ${sellerName}`
+                : `${sellerName} has rejected your connection request`;
+
+            await this.notificationService.sendPushNotification(
+              customerTokens,
+              'Invitation',
+              customerMessage,
+              {
+                screen: 'Contacts',
+              },
+            );
+
+            this.logger.log(
+              `Push notification sent to customer ${customer.id} for invitation ${dto.invite_id}`,
+            );
+          }
+        }
+      }
+    } catch (notifyError) {
+      this.logger.error(
+        `Failed to send push notification to customer for invitation ${dto.invite_id}`,
+        notifyError,
+      );
     }
 
     return { message: 'invite accepted', data: invitation };

@@ -14,6 +14,7 @@ import { ExtendedUser } from '../interfaces/user.interface';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { UpdateUserFlagsDto } from '../dto/UpdateUserFlags.dto';
 import { Messages } from 'src/common/enums/messages.enum';
+import { UpdateInviteLinkDto } from '../dto/update-invite-link.dto';
 
 /**
  * Service responsible for managing user-related operations including CRUD operations,
@@ -55,13 +56,6 @@ export class UserService {
     try {
       this.logger.debug(LogMessages.USER_CREATE_ATTEMPT, data.phone_number);
       const user = await this.userRepo.create(data);
-
-      // Automatically generate invite path for sellers (stored in invite_url only; no base URL in DB)
-      if (user.role === UserRole.SELLER && !user.invite_url) {
-        const { invite_url } = await this.generateOrGetSellerInviteLink(user.id);
-        user.invite_url = invite_url;
-      }
-
       this.logger.log(LogMessages.USER_CREATE_SUCCESS, user.id);
       return user;
     } catch (error) {
@@ -446,7 +440,8 @@ export class UserService {
   }
 
   /**
-   * Generates (or returns existing) invite path for a seller. Only the path is stored in DB.
+   * Returns full invite link for a seller using existing invite_url.
+   * Does NOT auto-generate any path; seller must set invite_url explicitly.
    */
   async generateOrGetSellerInviteLink(
     userId: bigint | number,
@@ -466,50 +461,65 @@ export class UserService {
       });
     }
 
-    // If path already stored, return full URL + path (no base URL in DB)
-    if (user.invite_url) {
-      return { link: this.getInviteUrl(user) ?? user.invite_url, invite_url: user.invite_url };
+    if (!user.invite_url) {
+      throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITE_URL_NOT_SET', {
+        message: 'Invite URL is not set. Please update invite_url first.',
+      });
     }
 
-    const baseSlugSource = user.username || user.email || user.phone_number || 'seller';
-    const slugBase = baseSlugSource
-      .toString()
-      .trim()
+    const link = this.getInviteUrl(user) ?? user.invite_url;
+    return { link, invite_url: user.invite_url };
+  }
+
+  /**
+   * Allows a seller to explicitly set/update their invite_url (path/slug).
+   * Ensures uniqueness and that only sellers can perform this action.
+   */
+  async updateInviteUrlForSeller(
+    userId: bigint | number,
+    payload: UpdateInviteLinkDto,
+  ): Promise<{ link: string; invite_url: string }> {
+    const repository = this.dataSource.getRepository(User);
+    const user = await repository.findOne({
+      where: { id: BigInt(userId), is_deleted: false },
+    });
+
+    if (!user) {
+      throw new BusinessException(LogMessages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+    }
+
+    if (user.role !== UserRole.SELLER) {
+      throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+        role: 'Only sellers can update invite links',
+      });
+    }
+
+    const rawSlug = payload.invite_url.trim();
+    const slug = rawSlug
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    const invite_url = await this.generateUniqueLinkName(slugBase || 'seller', repository);
-
-    // Store only the path in DB (no base URL)
-    user.invite_url = invite_url;
-    await repository.save(user);
-
-    const link = this.getInviteUrl(user) ?? invite_url;
-    return { link, invite_url };
-  }
-
-  private async generateUniqueLinkName(base: string, repository: any): Promise<string> {
-    let attempt = 0;
-    const maxAttempts = 10;
-
-    while (attempt < maxAttempts) {
-      // Always append a short random suffix so invite_url is not identical to username/email
-      const suffix = `-${Math.random().toString(36).substring(2, 6)}`;
-      const candidate = `${base}${suffix}`;
-
-      const existing = await repository.findOne({
-        where: { invite_url: candidate as unknown as string },
+    if (!slug) {
+      throw new BusinessException(Messages.INVALID_INPUT, 'INVALID_INVITE_URL', {
+        message: 'Invite URL cannot be empty after formatting.',
       });
-
-      if (!existing) {
-        return candidate;
-      }
-
-      attempt += 1;
     }
 
-    // Fallback to a purely random slug if collisions keep happening
-    return Math.random().toString(36).substring(2, 10);
+    const existingWithSameSlug = await repository.findOne({
+      where: { invite_url: slug as unknown as string },
+    });
+
+    if (existingWithSameSlug && existingWithSameSlug.id !== user.id) {
+      throw new BusinessException(Messages.INVITATION_ALREADY_PROCESSED, 'INVITE_URL_NOT_UNIQUE', {
+        message: 'This invite URL is already in use. Please choose a different one.',
+      });
+    }
+
+    user.invite_url = slug;
+    await repository.save(user);
+
+    const link = this.getInviteUrl(user) ?? user.invite_url;
+    return { link, invite_url: user.invite_url };
   }
 }
