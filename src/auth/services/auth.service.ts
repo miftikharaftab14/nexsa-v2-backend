@@ -106,10 +106,15 @@ export class AuthService {
       let invitaions: Invitation[] | null = null;
       let contacts: Contact[] | null = null;
       let new_created_user = false;
+
+      // Customer specific login behaviour
       if (dto.role === UserRole.CUSTOMER) {
-        if (!dto.deepLinktoken)
+        // Load invitations either by phone number or deep link token
+        if (!dto.deepLinktoken) {
           invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number);
-        else invitaions = await this.invitaionService.getInvitationByToken(dto.deepLinktoken);
+        } else {
+          invitaions = await this.invitaionService.getInvitationByToken(dto.deepLinktoken);
+        }
 
         // If seller_id is provided, narrow invitations down to that seller
         if (invitaions && invitaions.length > 0 && dto.seller_id) {
@@ -120,49 +125,60 @@ export class AuthService {
           });
         }
 
-        if (invitaions && invitaions.length > 0) {
-          if (!user) {
-            user = await this.userService.create({
-              phone_number: dto.phone_number,
-              role: UserRole.CUSTOMER,
-            });
-            new_created_user = true;
-            this.logger.log(
-              LogMessages.AUTH_LOGIN_SUCCESS,
-              `New user created - ${user.phone_number}`,
-            );
-          }
+        // If customer does not exist yet, create them
+        if (!user) {
+          user = await this.userService.create({
+            phone_number: dto.phone_number,
+            role: UserRole.CUSTOMER,
+          });
+          new_created_user = true;
+          this.logger.log(
+            LogMessages.AUTH_LOGIN_SUCCESS,
+            `New user created - ${user.phone_number}`,
+          );
         }
       }
 
       if (user) {
-        // For customer logins with a specific seller, ensure an invite exists
+        // For customer logins with a specific seller, ensure a contact and invite exist
         if (dto.role === UserRole.CUSTOMER && dto.seller_id) {
           try {
-            const contact = await this.contactService.findBySellerAndCustomer(
+            const contactRepository = this.dataSource.getRepository(Contact);
+
+            let contact = await this.contactService.findBySellerAndCustomer(
               dto.seller_id,
               BigInt(user.id),
             );
 
-            if (contact) {
-              const existingInvites =
-                await this.invitaionService.getInvitationsByContactId(Number(contact.id));
+            // If no contact exists between this customer and seller, create a minimal one
+            if (!contact) {
+              contact = await contactRepository.save(
+                contactRepository.create({
+                  seller_id: BigInt(dto.seller_id),
+                  invited_user_id: BigInt(user.id),
+                  full_name: user.username || '',
+                  phone_number: user.phone_number,
+                  email: user.email,
+                  status: ContactStatus.NEW,
+                }),
+              );
+            }
 
-              const hasAnyInviteForThisSeller = (existingInvites || []).some(invitation => {
-                const sellerIdFromInvitation =
-                  (invitation as any).seller_id ?? invitation.contact?.seller_id;
-                return Number(sellerIdFromInvitation) === dto.seller_id;
-              });
+            const existingInvites =
+              await this.invitaionService.getInvitationsByContactId(Number(contact.id));
 
-              if (!hasAnyInviteForThisSeller) {
-                const newInvitation = await this.invitaionService.createInvitation(
-                  contact as any,
-                );
-                if (!invitaions) {
-                  invitaions = [];
-                }
-                invitaions.push(newInvitation);
+            const hasAnyInviteForThisSeller = (existingInvites || []).some(invitation => {
+              const sellerIdFromInvitation =
+                (invitation as any).seller_id ?? invitation.contact?.seller_id;
+              return Number(sellerIdFromInvitation) === dto.seller_id;
+            });
+
+            if (!hasAnyInviteForThisSeller) {
+              const newInvitation = await this.invitaionService.createInvitation(contact as any);
+              if (!invitaions) {
+                invitaions = [];
               }
+              invitaions.push(newInvitation);
             }
           } catch (error) {
             this.logger.error(
