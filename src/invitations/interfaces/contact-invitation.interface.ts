@@ -1,13 +1,28 @@
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { Invitation } from '../entities/invitation.entity';
-import { InvitationStatus } from 'src/common/enums/contact-invitation.enum';
+import {
+  InvitationRecipient,
+  InvitationStatus,
+  InvitationType,
+} from 'src/common/enums/contact-invitation.enum';
 
 export interface IInvitationService {
-  createInvitation(contact: Contact): Promise<Invitation>;
+  createInvitation(
+    contact: Contact,
+    inviteType?: InvitationType,
+    inviteFor?: InvitationRecipient,
+  ): Promise<Invitation>;
+  createInvitationForCustomer(
+    sellerId: bigint,
+    customerId: bigint,
+    inviteType?: InvitationType,
+    inviteFor?: InvitationRecipient,
+  ): Promise<Invitation>;
   cancelInvitation(invitationId: bigint): Promise<void>;
   acceptInvitation(token: string, userId: number): Promise<void>;
   getInvitationByToken(token: string): Promise<Invitation[]>;
   getInvitationByNumber(phoneNumber: string): Promise<Invitation[]>;
+  getInvitationsByCustomerId(customerId: number | bigint): Promise<Invitation[]>;
   getInvitationById(id: bigint): Promise<Invitation>;
   getInvitationsByContactId(contactId: number): Promise<Invitation[]>;
   getAcceptedInvitationsBySellerId(sellerId: number | bigint): Promise<Invitation[]>;

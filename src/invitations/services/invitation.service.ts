@@ -2,8 +2,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { InvitationMethod, InvitationStatus } from '../../common/enums/contact-invitation.enum';
+import {
+  InvitationMethod,
+  InvitationRecipient,
+  InvitationStatus,
+  InvitationType,
+} from '../../common/enums/contact-invitation.enum';
 import { Contact } from '../../contacts/entities/contact.entity';
+import { User } from '../../users/entities/user.entity';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { Messages } from '../../common/enums/messages.enum';
 import { LogMessages, LogContexts } from '../../common/enums/logging.enum';
@@ -24,6 +30,8 @@ export class InvitationService implements IInvitationService {
     private readonly invitationRepo: Repository<Invitation>,
     @InjectRepository(Contact)
     private readonly contactRepo: Repository<Contact>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     @Inject(InjectionToken.INVITATION_STRATEGIES)
     private readonly strategies: IInvitationStrategy[],
     private readonly configService: ConfigService,
@@ -58,7 +66,11 @@ export class InvitationService implements IInvitationService {
     );
   }
 
-  async createInvitation(contact: Contact): Promise<Invitation> {
+  async createInvitation(
+    contact: Contact,
+    inviteType: InvitationType = InvitationType.NORMAL,
+    inviteFor: InvitationRecipient = InvitationRecipient.CUSTOMER,
+  ): Promise<Invitation> {
     try {
       this.logger.debug(LogMessages.INVITATION_CREATE_ATTEMPT);
 
@@ -72,11 +84,14 @@ export class InvitationService implements IInvitationService {
       await strategy.sendInvitation(contact, inviteToken);
       const invitation = this.invitationRepo.create({
         contact_id: contact.id,
+        customer_id: contact.invited_user_id || null,
         invite_token: inviteToken,
         method: strategy.getStrategyType(),
         invite_sent_at: new Date(),
         status: InvitationStatus.PENDING,
         seller_id: contact.seller_id,
+        invite_type: inviteType,
+        invite_for: inviteFor,
       });
 
       await this.invitationRepo.save(invitation);
@@ -96,6 +111,26 @@ export class InvitationService implements IInvitationService {
         'INVITATION_CREATION_FAILED',
       );
     }
+  }
+
+  async createInvitationForCustomer(
+    sellerId: bigint,
+    customerId: bigint,
+    inviteType: InvitationType = InvitationType.NORMAL,
+    inviteFor: InvitationRecipient = InvitationRecipient.CUSTOMER,
+  ): Promise<Invitation> {
+    const invitation = this.invitationRepo.create({
+      seller_id: sellerId,
+      customer_id: customerId,
+      contact_id: null,
+      invite_token: this.generateRandomCode(),
+      method: InvitationMethod.SMS,
+      invite_sent_at: new Date(),
+      status: InvitationStatus.PENDING,
+      invite_type: inviteType,
+      invite_for: inviteFor,
+    });
+    return this.invitationRepo.save(invitation);
   }
 
   generateRandomCode(length = 6): string {
@@ -279,6 +314,35 @@ export class InvitationService implements IInvitationService {
     }
   }
 
+  async getInvitationsByCustomerId(customerId: number | bigint): Promise<Invitation[]> {
+    const invitations = await this.invitationRepo.find({
+      where: [
+        {
+          customer_id: BigInt(customerId),
+          status: InvitationStatus.PENDING,
+        },
+        {
+          customer_id: BigInt(customerId),
+          invite_for: InvitationRecipient.CUSTOMER,
+          status: InvitationStatus.REQUESTED,
+        },
+      ],
+      relations: ['contact', 'contact.seller', 'seller'],
+      order: { created_at: 'DESC' },
+    });
+
+    const sellerIds = [...new Set(invitations.map(i => String(i.seller_id)))];
+    const sellers = await Promise.all(
+      sellerIds.map(id => this.userRepo.findOne({ where: { id: BigInt(id) } })),
+    );
+    const sellerMap = new Map(sellers.filter(Boolean).map(s => [String(s!.id), s!]));
+
+    return invitations.map(invitation => ({
+      ...invitation,
+      seller: invitation.seller || sellerMap.get(String(invitation.seller_id)) || null,
+    })) as Invitation[];
+  }
+
   async getInvitationById(id: bigint): Promise<Invitation> {
     try {
       this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, id);
@@ -397,13 +461,32 @@ export class InvitationService implements IInvitationService {
         where: {
           status: InvitationStatus.PENDING,
           seller: { id: BigInt(sellerId) },
+          invite_for: InvitationRecipient.SELLER,
         },
-        relations: ['contact', 'contact.seller'],
+        relations: ['contact', 'contact.seller', 'seller'],
         order: { created_at: 'DESC' },
       });
 
+      const customerIds = [
+        ...new Set(
+          invitations
+            .map(invitation => invitation.customer_id)
+            .filter((id): id is bigint => id !== null && id !== undefined),
+        ),
+      ];
+      const customers = await Promise.all(
+        customerIds.map(id => this.userRepo.findOne({ where: { id: BigInt(id) } })),
+      );
+      const customerMap = new Map(customers.filter(Boolean).map(c => [String(c!.id), c!]));
+
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, sellerId);
-      return invitations;
+      return invitations.map(invitation => ({
+        ...invitation,
+        customer: invitation.customer_id
+          ? customerMap.get(String(invitation.customer_id)) || null
+          : null,
+        seller: invitation.seller || invitation.contact?.seller || null,
+      })) as Invitation[];
     } catch (error) {
       if (error instanceof BusinessException) {
         throw error;

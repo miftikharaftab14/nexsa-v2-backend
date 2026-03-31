@@ -105,9 +105,10 @@ export class AuthController {
   @ApiResponse(_200_resendOtp)
   @HttpCode(HttpStatus.OK)
   async acceptInvite(
+    @CurrentUser() currentUser: CurrentUserType,
     @Body() acceptInviteDto: AcceptInviteDto,
   ): Promise<ApiResponseInterface<{ message: string }>> {
-    const result = await this.authService.acceptInvite(acceptInviteDto);
+    const result = await this.authService.acceptInvite(acceptInviteDto, Number(currentUser.userId));
     return {
       success: true,
       message: Messages.INVITATION_ACCEPTED,

@@ -9,7 +9,12 @@ import {
 } from 'typeorm';
 import { Contact } from '../../contacts/entities/contact.entity';
 import { User } from '../../users/entities/user.entity';
-import { InvitationMethod, InvitationStatus } from '../../common/enums/contact-invitation.enum';
+import {
+  InvitationMethod,
+  InvitationRecipient,
+  InvitationStatus,
+  InvitationType,
+} from '../../common/enums/contact-invitation.enum';
 
 @Entity('contact_invitations')
 export class Invitation {
@@ -19,8 +24,11 @@ export class Invitation {
   @Column({ name: 'seller_id', type: 'bigint' })
   seller_id: bigint;
 
-  @Column({ name: 'contact_id', type: 'bigint' })
-  contact_id: bigint;
+  @Column({ name: 'customer_id', type: 'bigint', nullable: true })
+  customer_id: bigint | null;
+
+  @Column({ name: 'contact_id', type: 'bigint', nullable: true })
+  contact_id: bigint | null;
 
   @Column({ length: 255, unique: true })
   invite_token: string;
@@ -43,6 +51,22 @@ export class Invitation {
     default: InvitationStatus.PENDING,
   })
   status: InvitationStatus;
+
+  @Column({
+    name: 'invite_type',
+    type: 'varchar',
+    length: 20,
+    default: InvitationType.NORMAL,
+  })
+  invite_type: InvitationType;
+
+  @Column({
+    name: 'invite_for',
+    type: 'varchar',
+    length: 20,
+    default: InvitationRecipient.CUSTOMER,
+  })
+  invite_for: InvitationRecipient;
 
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;

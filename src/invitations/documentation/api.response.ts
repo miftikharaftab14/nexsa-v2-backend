@@ -1,6 +1,10 @@
 import { HttpStatus } from '@nestjs/common';
 import { ApiTypes } from 'src/common/enums/api-types.enum';
-import { InvitationMethod, InvitationStatus } from 'src/common/enums/contact-invitation.enum';
+import {
+  InvitationMethod,
+  InvitationStatus,
+  InvitationType,
+} from 'src/common/enums/contact-invitation.enum';
 import { Examples } from 'src/common/enums/examples.enum';
 import { Messages } from 'src/common/enums/messages.enum';
 
@@ -31,6 +35,11 @@ export const _200_invitation = {
             type: ApiTypes.STRING,
             enum: Object.values(InvitationStatus),
             example: InvitationStatus.PENDING,
+          },
+          invite_type: {
+            type: ApiTypes.STRING,
+            enum: Object.values(InvitationType),
+            example: InvitationType.NORMAL,
           },
           created_at: { type: ApiTypes.STRING, example: Examples.CREATED_AT },
         },
@@ -68,6 +77,11 @@ export const _200_invitations = {
               type: ApiTypes.STRING,
               enum: Object.values(InvitationStatus),
               example: InvitationStatus.PENDING,
+            },
+            invite_type: {
+              type: ApiTypes.STRING,
+              enum: Object.values(InvitationType),
+              example: InvitationType.NORMAL,
             },
             created_at: { type: ApiTypes.STRING, example: Examples.CREATED_AT },
             contact: {
