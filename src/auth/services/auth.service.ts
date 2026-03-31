@@ -399,7 +399,28 @@ export class AuthService {
         dto.invitation_status === InvitationStatus.REJECTED ||
         dto.invitation_status === InvitationStatus.CANCELLED
       ) {
-        await invitationRepository.delete({ id: invitation.id });
+        if (dto.invitation_status === InvitationStatus.CANCELLED && invitation.status === InvitationStatus.REQUESTED) {
+          // Cancel after accept: keep customer invite and roll it back to PENDING
+          await invitationRepository.update(
+            { id: invitation.id },
+            {
+              status: InvitationStatus.PENDING,
+              invite_accepted_at: () => 'NULL',
+              invite_cancelled_at: () => 'NULL',
+            },
+          );
+
+          // Remove seller-side invite(s) for this pair
+          if (customerId && sellerId) {
+            await invitationRepository.delete({
+              seller_id: BigInt(sellerId),
+              customer_id: BigInt(customerId),
+              invite_for: InvitationRecipient.SELLER,
+            });
+          }
+        } else {
+          await invitationRepository.delete({ id: invitation.id });
+        }
       }
     }
 
