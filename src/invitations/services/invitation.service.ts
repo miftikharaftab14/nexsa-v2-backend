@@ -1,7 +1,7 @@
 // src/contacts/services/contact-invitation.service.ts
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   InvitationMethod,
   InvitationRecipient,
@@ -275,38 +275,67 @@ export class InvitationService implements IInvitationService {
     try {
       this.logger.debug(LogMessages.INVITATION_FETCH_ATTEMPT, phoneNumber);
 
-      const invitation = await this.invitationRepo.find({
-        where: { contact: { phone_number: phoneNumber }, status: InvitationStatus.PENDING },
-        relations: ['contact', 'contact.seller'],
+      // Legacy: invitation tied to contact row with this phone
+      const byContact = await this.invitationRepo.find({
+        where: {
+          contact: { phone_number: phoneNumber },
+          status: In([InvitationStatus.PENDING, InvitationStatus.REQUESTED]),
+        },
+        relations: ['contact', 'contact.seller', 'seller'],
       });
 
-      if (!invitation) {
-        throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITATION_NOT_FOUND');
+      // New flow: invitation uses customer_id + optional null contact_id
+      const customerUser = await this.userRepo.findOne({
+        where: { phone_number: phoneNumber },
+      });
+      const byCustomerId = customerUser
+        ? await this.getInvitationsByCustomerId(customerUser.id)
+        : [];
+
+      const mergedById = new Map<string, Invitation>();
+      for (const inv of [...byContact, ...byCustomerId]) {
+        mergedById.set(String(inv.id), inv);
+      }
+      const invitations = Array.from(mergedById.values());
+
+      if (!invitations.length) {
+        this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, `${phoneNumber} (none)`);
+        return [];
       }
 
       this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, phoneNumber);
       return Promise.all(
-        (invitation || []).map(async invitation => {
-          const { contact } = invitation;
-          const { seller } = contact || {};
+        invitations.map(async invitation => {
+          const contact = invitation.contact;
+          const seller = contact?.seller ?? invitation.seller ?? null;
 
           const profilePictureUrl = seller?.profile_picture
             ? await this.fileService.getPresignedUrl(Number(seller.profile_picture))
             : null;
 
-          return {
-            ...invitation,
-            contact: {
-              ...contact,
-              seller: {
+          const sellerPayload = seller
+            ? {
                 ...seller,
                 profile_picture: profilePictureUrl || '',
-              },
-            },
-          };
+              }
+            : null;
+
+          return {
+            ...invitation,
+            contact: contact
+              ? {
+                  ...contact,
+                  seller: sellerPayload,
+                }
+              : null,
+            seller: sellerPayload ?? invitation.seller,
+          } as Invitation;
         }),
       );
     } catch (error) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
       this.logger.error(LogMessages.INVITATION_FETCH_FAILED, error);
       throw new BusinessException(LogMessages.INVITATION_FETCH_FAILED, 'INVITATION_FETCH_FAILED', {
         error: error instanceof Error ? error.message : 'Unknown error',
