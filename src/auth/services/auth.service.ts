@@ -303,7 +303,7 @@ export class AuthService {
         invitation = await this.invitaionService.createInvitationForCustomer(
           BigInt(dto.seller_id),
           BigInt(customer.id),
-          InvitationType.NORMAL,
+          InvitationType.LINK,
           InvitationRecipient.CUSTOMER,
         );
       }
