@@ -348,6 +348,7 @@ export class InvitationService implements IInvitationService {
       where: [
         {
           customer_id: BigInt(customerId),
+          invite_for: InvitationRecipient.CUSTOMER,
           status: InvitationStatus.PENDING,
         },
         {
