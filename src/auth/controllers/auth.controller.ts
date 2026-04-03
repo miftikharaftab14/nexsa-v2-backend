@@ -26,6 +26,8 @@ import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { CurrentUserType } from 'src/common/types/current-user.interface';
 import { Roles } from '../decorators/roles.decorator';
 import { UserRole } from 'src/common/enums/user-role.enum';
+import { Invitation } from 'src/invitations/entities/invitation.entity';
+import { InvitationStatus } from 'src/common/enums/contact-invitation.enum';
 
 @Controller('auth')
 @ApiTags('auth')
@@ -107,13 +109,23 @@ export class AuthController {
   async acceptInvite(
     @CurrentUser() currentUser: CurrentUserType,
     @Body() acceptInviteDto: AcceptInviteDto,
-  ): Promise<ApiResponseInterface<{ message: string }>> {
-    const result = await this.authService.acceptInvite(acceptInviteDto, Number(currentUser.userId));
+  ): Promise<ApiResponseInterface<Invitation>> {
+    const invitation = await this.authService.acceptInvite(
+      acceptInviteDto,
+      Number(currentUser.userId),
+    );
+    const actionMessages: Partial<Record<InvitationStatus, Messages>> = {
+      [InvitationStatus.ACCEPTED]: Messages.INVITATION_ACCEPTED,
+      [InvitationStatus.CANCELLED]: Messages.INVITATION_CANCELLED,
+      [InvitationStatus.REJECTED]: Messages.INVITATION_REJECTED,
+    };
+    const message =
+      actionMessages[acceptInviteDto.invitation_status] ?? Messages.INVITATION_UPDATE_SUCCESS;
     return {
       success: true,
-      message: Messages.INVITATION_ACCEPTED,
+      message,
       status: HttpStatus.OK,
-      data: result,
+      data: invitation,
     };
   }
 
@@ -126,16 +138,16 @@ export class AuthController {
   async inviteSeller(
     @CurrentUser() currentUser: CurrentUserType,
     @Body(new CustomValidationPipe()) inviteSellerDto: InviteSellerDto,
-  ): Promise<ApiResponseInterface<{ message: string }>> {
-    const result = await this.authService.inviteSeller(
+  ): Promise<ApiResponseInterface<Invitation>> {
+    const invitation = await this.authService.inviteSeller(
       Number(currentUser.userId),
       inviteSellerDto,
     );
     return {
       success: true,
-      message: result.message,
+      message: Messages.INVITATION_SENT_TO_SELLER,
       status: HttpStatus.OK,
-      data: result,
+      data: invitation,
     };
   }
 }

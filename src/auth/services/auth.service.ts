@@ -133,26 +133,32 @@ export class AuthService {
       if (user) {
         if (dto.role === UserRole.CUSTOMER && dto.seller_id) {
           try {
-            const existingInvites = await this.invitaionService.getInvitationsByCustomerId(user.id);
-            const hasAnyInviteForThisSeller = (existingInvites || []).some(
-              invitation =>
-                Number(invitation.seller_id) === dto.seller_id &&
-                invitation.invite_for === InvitationRecipient.CUSTOMER &&
-                (invitation.status === InvitationStatus.PENDING ||
-                  invitation.status === InvitationStatus.REQUESTED),
+            const existingContact = await this.contactService.findBySellerAndCustomer(
+              dto.seller_id,
+              BigInt(user.id),
             );
-
-            if (!hasAnyInviteForThisSeller) {
-              const newInvitation = await this.invitaionService.createInvitationForCustomer(
-                BigInt(dto.seller_id),
-                BigInt(user.id),
-                InvitationType.LINK,
-                InvitationRecipient.CUSTOMER,
+            if (!existingContact) {
+              const existingInvites = await this.invitaionService.getInvitationsByCustomerId(user.id);
+              const hasAnyInviteForThisSeller = (existingInvites || []).some(
+                invitation =>
+                  Number(invitation.seller_id) === dto.seller_id &&
+                  invitation.invite_for === InvitationRecipient.CUSTOMER &&
+                  (invitation.status === InvitationStatus.PENDING ||
+                    invitation.status === InvitationStatus.REQUESTED),
               );
-              if (!invitaions) {
-                invitaions = [];
+
+              if (!hasAnyInviteForThisSeller) {
+                const newInvitation = await this.invitaionService.createInvitationForCustomer(
+                  BigInt(dto.seller_id),
+                  BigInt(user.id),
+                  InvitationType.LINK,
+                  InvitationRecipient.CUSTOMER,
+                );
+                if (!invitaions) {
+                  invitaions = [];
+                }
+                invitaions.push(newInvitation);
               }
-              invitaions.push(newInvitation);
             }
           } catch (error) {
             this.logger.error(
@@ -264,7 +270,7 @@ export class AuthService {
   async inviteSeller(
     customerId: number,
     dto: InviteSellerDto,
-  ): Promise<{ message: string; invitation: Invitation }> {
+  ): Promise<Invitation> {
     try {
       const customer = await this.userService.findOne(customerId);
       if (!customer) {
@@ -286,6 +292,14 @@ export class AuthService {
         throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
           role: 'Target user must be a seller',
         });
+      }
+
+      const existingContact = await this.contactService.findBySellerAndCustomer(
+        dto.seller_id,
+        BigInt(customer.id),
+      );
+      if (existingContact) {
+        throw new BusinessException(Messages.CONTACT_ALREADY_EXISTS, 'CONTACT_ALREADY_EXISTS');
       }
 
       const existingInvites = await this.invitaionService.getInvitationsByCustomerId(customer.id);
@@ -325,7 +339,7 @@ export class AuthService {
         this.logger.error('Failed to send push notification to seller for invite', notifyError);
       }
 
-      return { message: 'Invitation sent to seller', invitation };
+      return invitation;
     } catch (error: unknown) {
       if (error instanceof BusinessException) {
         throw error;
@@ -344,7 +358,7 @@ export class AuthService {
   async acceptInvite(
     dto: AcceptInviteDto,
     actorUserId: number,
-  ): Promise<{ message: string; data: Invitation }> {
+  ): Promise<Invitation> {
     this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, dto.invite_id);
 
     let invitation = await this.invitaionService.getInvitationById(dto.invite_id);
@@ -499,7 +513,7 @@ export class AuthService {
       ? await contactRepository.findOne({ where: { id: BigInt(resolvedContactId) } })
       : null;
 
-    if (sellerId && actorIsCustomer) {
+    if (sellerId && actorIsCustomer && dto.invitation_status === InvitationStatus.ACCEPTED) {
       try {
         const seller = await userRepository.findOne({
           where: {
@@ -516,10 +530,7 @@ export class AuthService {
 
           if (sellerTokens.length > 0) {
             const fullName = contact?.full_name || invitedUser.username || 'User';
-            const actionMessage =
-              dto.invitation_status === InvitationStatus.ACCEPTED
-                ? `User ${fullName} has accepted your invitation`
-                : `User ${fullName} has rejected your invitation`;
+            const actionMessage = `User ${fullName} has accepted your invitation`;
 
             // Send push notification
             await this.notificationService.sendPushNotification(
@@ -544,9 +555,14 @@ export class AuthService {
       }
     }
 
-    // Send notification to customer when seller acts on seller-target invite
+    // Send notification to customer when seller accepts seller-target invite
     try {
-      if (actorIsSeller && invitation.invite_for === InvitationRecipient.SELLER && customerId) {
+      if (
+        actorIsSeller &&
+        invitation.invite_for === InvitationRecipient.SELLER &&
+        customerId &&
+        dto.invitation_status === InvitationStatus.ACCEPTED
+      ) {
         const customer = await userRepository.findOne({
           where: {
             id: BigInt(customerId),
@@ -562,10 +578,7 @@ export class AuthService {
 
           if (customerTokens.length > 0) {
             const sellerName = invitation.seller?.username || 'Seller';
-            const customerMessage =
-              dto.invitation_status === InvitationStatus.ACCEPTED
-                ? `You have a new contact with ${sellerName}`
-                : `${sellerName} has rejected your connection request`;
+            const customerMessage = `You have a new contact with ${sellerName}`;
 
             await this.notificationService.sendPushNotification(
               customerTokens,
@@ -589,6 +602,6 @@ export class AuthService {
       );
     }
 
-    return { message: 'Invitation updated', data: invitation };
+    return invitation;
   }
 }
