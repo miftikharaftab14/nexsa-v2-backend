@@ -322,21 +322,23 @@ export class AuthService {
         );
       }
 
-      try {
-        const sellerTokens = await this.userDeviceTokenService.getTokensByUser(BigInt(seller.id));
-        if (sellerTokens.length > 0) {
-          const fullName = customer.username || customer.phone_number || 'Customer';
-          await this.notificationService.sendPushNotification(
-            sellerTokens,
-            'New connection request',
-            `Customer ${fullName} wants to connect with you`,
-            {
-              screen: 'Contacts',
-            },
-          );
+      if (!pendingInvite) {
+        try {
+          const sellerTokens = await this.userDeviceTokenService.getTokensByUser(BigInt(seller.id));
+          if (sellerTokens.length > 0) {
+            const fullName = customer.username || customer.phone_number || 'Customer';
+            await this.notificationService.sendPushNotification(
+              sellerTokens,
+              'New connection request',
+              `Customer ${fullName} wants to connect with you`,
+              {
+                screen: 'Contacts',
+              },
+            );
+          }
+        } catch (notifyError) {
+          this.logger.error('Failed to send push notification to seller for invite', notifyError);
         }
-      } catch (notifyError) {
-        this.logger.error('Failed to send push notification to seller for invite', notifyError);
       }
 
       return invitation;
@@ -489,23 +491,23 @@ export class AuthService {
         }
         resolvedContactId = contact.id;
         await invitationRepository.update(
-          { seller_id: BigInt(sellerId), customer_id: BigInt(customerId) },
-          { contact_id: contact.id },
+          { id: invitation.id },
+          {
+            status: InvitationStatus.ACCEPTED,
+            contact_id: contact.id,
+            invite_accepted_at: new Date(),
+          },
         );
-      }
-      if (
-        dto.invitation_status === InvitationStatus.ACCEPTED ||
-        dto.invitation_status === InvitationStatus.REJECTED ||
-        dto.invitation_status === InvitationStatus.CANCELLED
-      ) {
-        await invitationRepository.delete({ id: invitation.id });
-      }
-      if (dto.invitation_status === InvitationStatus.ACCEPTED) {
         await invitationRepository.delete({
           seller_id: BigInt(sellerId),
           customer_id: BigInt(customerId),
           invite_for: InvitationRecipient.CUSTOMER,
         });
+      } else if (
+        dto.invitation_status === InvitationStatus.REJECTED ||
+        dto.invitation_status === InvitationStatus.CANCELLED
+      ) {
+        await invitationRepository.delete({ id: invitation.id });
       }
     }
 
@@ -600,6 +602,14 @@ export class AuthService {
         `Failed to send push notification to customer for invitation ${dto.invite_id}`,
         notifyError,
       );
+    }
+
+    if (
+      actorIsSeller &&
+      dto.invitation_status === InvitationStatus.ACCEPTED &&
+      invitation.invite_for === InvitationRecipient.SELLER
+    ) {
+      invitation = await this.invitaionService.getInvitationById(dto.invite_id);
     }
 
     return invitation;
