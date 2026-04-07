@@ -16,6 +16,7 @@ import { FileService } from 'src/files/services/file.service';
 import { InjectionToken } from 'src/common/constants/injection-tokens';
 import { GalleryImage } from 'src/gallery-image/entities/gallery-image.entity';
 import { BlocksService } from 'src/blocks/blocks.service';
+import { GalleryType } from 'src/common/enums/gallery-type.enum';
 
 @Injectable()
 export class GalleryService {
@@ -71,9 +72,19 @@ export class GalleryService {
     if (existing) {
       throw new BadRequestException('Gallery with this name already exists for this user');
     }
+
+    if (createGalleryDto.type === GalleryType.GALLERY && createGalleryDto.url) {
+      throw new BadRequestException('Url is only allowed when gallery type is link');
+    }
+    if (createGalleryDto.type === GalleryType.LINK && !createGalleryDto.url) {
+      throw new BadRequestException('Url is required when gallery type is link');
+    }
+
     const gallery = this.galleriesRepository.create({
       name: createGalleryDto.name,
+      type: createGalleryDto.type,
       description: createGalleryDto.description,
+      url: createGalleryDto.type === GalleryType.LINK ? createGalleryDto.url : null,
       userId: user.id,
       user,
     });
@@ -119,6 +130,8 @@ export class GalleryService {
       .select([
         'gallery.id AS id',
         'gallery.description AS description',
+        'gallery.type AS type',
+        'gallery.url AS url',
         'gallery.notificationsEnabled AS "notificationsEnabled"',
         'gallery.profileGalleryImageId AS "profileGalleryImageId"',
         'gallery.name AS name',
@@ -200,10 +213,22 @@ export class GalleryService {
   }
 
   async update(id: number, updateGalleryDto: UpdateGalleryDto): Promise<Gallery> {
-    console.log({ updateGalleryDto });
-
     const gallery = await this.findOne(id);
+    const finalType = updateGalleryDto.type ?? gallery.type;
+    const finalUrl =
+      updateGalleryDto.url !== undefined ? updateGalleryDto.url : gallery.url;
+
+    if (finalType === GalleryType.GALLERY && updateGalleryDto.url) {
+      throw new BadRequestException('Url is only allowed when gallery type is link');
+    }
+    if (finalType === GalleryType.LINK && !finalUrl) {
+      throw new BadRequestException('Url is required when gallery type is link');
+    }
+
     Object.assign(gallery, updateGalleryDto);
+    if (finalType === GalleryType.GALLERY) {
+      gallery.url = null;
+    }
     if (updateGalleryDto.image) {
       const uploadedFile = await this.fileService.storeUploadedFile(updateGalleryDto.image);
       gallery.profileGalleryImageId = uploadedFile.id;

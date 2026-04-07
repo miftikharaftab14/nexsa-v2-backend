@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
   InternalServerErrorException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { GalleryImageRepository } from './repository/gallery-image.repository';
 import { InjectionToken } from '../common/constants/injection-tokens';
@@ -25,6 +26,7 @@ import { BlocksService } from 'src/blocks/blocks.service';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, In } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
+import { GalleryType } from 'src/common/enums/gallery-type.enum';
 
 @Injectable()
 export class GalleryImagesService {
@@ -76,6 +78,9 @@ export class GalleryImagesService {
       }
       // Validate gallery exists
       const gallery: Gallery = await this.galleryService.findOne(dto.galleryId);
+      if (gallery.type === GalleryType.LINK) {
+        throw new BadRequestException('Cannot add images to a link gallery');
+      }
 
       // Only allow one image
       if (dto.image && dto.image?.length <= 0) {
