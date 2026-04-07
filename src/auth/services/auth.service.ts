@@ -27,6 +27,7 @@ import {
 } from '../../common/enums/contact-invitation.enum';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { InvitationGateway } from 'src/invitations/invitation.gateway';
 
 @Injectable()
 export class AuthService {
@@ -43,6 +44,7 @@ export class AuthService {
     private readonly contactService: IContactUpdate,
     private readonly userDeviceTokenService: UserDeviceTokenService,
     private readonly notificationService: NotificationService,
+    private readonly invitationGateway: InvitationGateway,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -607,6 +609,34 @@ export class AuthService {
       ? await contactRepository.findOne({ where: { id: BigInt(resolvedContactId) } })
       : null;
 
+    const shouldEmitInviteAction =
+      dto.invitation_status === InvitationStatus.ACCEPTED ||
+      dto.invitation_status === InvitationStatus.REJECTED ||
+      dto.invitation_status === InvitationStatus.CANCELLED;
+
+    if (shouldEmitInviteAction) {
+      const oppositeUserId = actorIsSeller ? customerId : sellerId ? Number(sellerId) : null;
+      if (oppositeUserId) {
+        try {
+          await this.invitationGateway.emitInvitationStatusToUser({
+            receiverUserId: oppositeUserId,
+            invitationId: dto.invite_id,
+            status: dto.invitation_status,
+            actorUserId,
+            inviteFor: invitation.invite_for,
+            sellerId: sellerId ?? null,
+            customerId: customerId ?? null,
+            contactId: resolvedContactId ?? invitation.contact_id ?? null,
+          });
+        } catch (socketError) {
+          this.logger.error(
+            `Failed to emit invitation socket event for invite ${dto.invite_id}`,
+            socketError,
+          );
+        }
+      }
+    }
+
     if (sellerId && actorIsCustomer && dto.invitation_status === InvitationStatus.ACCEPTED) {
       try {
         const seller = await userRepository.findOne({
@@ -627,7 +657,7 @@ export class AuthService {
             const actionMessage = `User ${fullName} has accepted your invitation`;
 
             // Send push notification
-            await this.notificationService.sendPushNotification(
+            await this.sendPushNotificationSafely(
               sellerTokens,
               'Invitation',
               actionMessage,
@@ -674,7 +704,7 @@ export class AuthService {
             const sellerName = invitation.seller?.username || 'Seller';
             const customerMessage = `You have a new contact with ${sellerName}`;
 
-            await this.notificationService.sendPushNotification(
+            await this.sendPushNotificationSafely(
               customerTokens,
               'Invitation',
               customerMessage,
@@ -800,5 +830,18 @@ export class AuthService {
     }
 
     throw new BusinessException(Messages.INVALID_INPUT, 'INVALID_INPUT');
+  }
+
+  private async sendPushNotificationSafely(
+    tokens: string[],
+    title: string,
+    body: string,
+    data: Record<string, string>,
+  ): Promise<void> {
+    try {
+      await this.notificationService.sendPushNotification(tokens, title, body, data);
+    } catch (error) {
+      this.logger.error('Push notification failed (non-blocking)', error);
+    }
   }
 }
