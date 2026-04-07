@@ -135,13 +135,14 @@ export class InvitationGateway
 
   async emitInvitationStatusToUser(params: {
     receiverUserId: number | bigint;
-    invitationId: number | bigint;
+    response: {
+      success: boolean;
+      message: string;
+      status: number;
+      data: unknown;
+    };
     status: string;
     actorUserId: number | bigint;
-    inviteFor: string;
-    sellerId?: number | bigint | null;
-    customerId?: number | bigint | null;
-    contactId?: number | bigint | null;
   }): Promise<void> {
     const receiverId = params.receiverUserId.toString();
     const socketId = await this.redis.get(`${this.redisPrefix}:invitation_user_socket:${receiverId}`);
@@ -149,14 +150,13 @@ export class InvitationGateway
       return;
     }
 
+    const normalizedResponse = this.normalizeForSocket(params.response) as Record<string, unknown>;
     const payload = {
-      invitationId: params.invitationId.toString(),
-      status: params.status,
-      actorUserId: params.actorUserId.toString(),
-      inviteFor: params.inviteFor,
-      sellerId: params.sellerId != null ? params.sellerId.toString() : null,
-      customerId: params.customerId != null ? params.customerId.toString() : null,
-      contactId: params.contactId != null ? params.contactId.toString() : null,
+      ...normalizedResponse,
+      event: {
+        status: params.status,
+        actorUserId: params.actorUserId.toString(),
+      },
       timestamp: new Date().toISOString(),
     };
 
@@ -166,5 +166,25 @@ export class InvitationGateway
     } else if (params.status === 'REJECTED' || params.status === 'CANCELLED') {
       this.server.to(socketId).emit('invitation_rejected', payload);
     }
+  }
+
+  private normalizeForSocket(value: unknown): unknown {
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    if (Array.isArray(value)) {
+      return value.map(item => this.normalizeForSocket(item));
+    }
+    if (value && typeof value === 'object') {
+      const result: Record<string, unknown> = {};
+      for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+        result[key] = this.normalizeForSocket(nestedValue);
+      }
+      return result;
+    }
+    return value;
   }
 }

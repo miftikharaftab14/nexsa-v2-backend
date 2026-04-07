@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, Logger, HttpStatus } from '@nestjs/common';
 import { SignupDto } from '../dto/signup.dto';
 import { LoginDto } from '../dto/login.dto';
 import { VerifyOtpDto } from '../dto/verify-otp.dto';
@@ -618,15 +618,37 @@ export class AuthService {
       const oppositeUserId = actorIsSeller ? customerId : sellerId ? Number(sellerId) : null;
       if (oppositeUserId) {
         try {
+          const actionMessages: Partial<Record<InvitationStatus, Messages>> = {
+            [InvitationStatus.ACCEPTED]: Messages.INVITATION_ACCEPTED,
+            [InvitationStatus.CANCELLED]: Messages.INVITATION_CANCELLED,
+          };
+          const message =
+            dto.invitation_status === InvitationStatus.REJECTED
+              ? 'Invitation rejected successfully'
+              : actionMessages[dto.invitation_status] ?? Messages.INVITATION_UPDATE_SUCCESS;
+
+          const sellerUser = sellerId
+            ? await userRepository.findOne({ where: { id: BigInt(sellerId) } })
+            : null;
+          const customerUser = customerId
+            ? await userRepository.findOne({ where: { id: BigInt(customerId) } })
+            : null;
+          const socketInvitationData = {
+            ...invitation,
+            seller: invitation.seller ?? sellerUser ?? null,
+            customer: customerUser ?? null,
+          };
+
           await this.invitationGateway.emitInvitationStatusToUser({
             receiverUserId: oppositeUserId,
-            invitationId: dto.invite_id,
+            response: {
+              success: true,
+              message,
+              status: HttpStatus.OK,
+              data: socketInvitationData,
+            },
             status: dto.invitation_status,
             actorUserId,
-            inviteFor: invitation.invite_for,
-            sellerId: sellerId ?? null,
-            customerId: customerId ?? null,
-            contactId: resolvedContactId ?? invitation.contact_id ?? null,
           });
         } catch (socketError) {
           this.logger.error(
