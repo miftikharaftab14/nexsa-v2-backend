@@ -329,23 +329,21 @@ export class AuthService {
         );
       }
 
-      if (!pendingInvite) {
-        try {
-          const sellerTokens = await this.userDeviceTokenService.getTokensByUser(BigInt(seller.id));
-          if (sellerTokens.length > 0) {
-            const fullName = customer.username || customer.phone_number || 'Customer';
-            await this.notificationService.sendPushNotification(
-              sellerTokens,
-              'New connection request',
-              `Customer ${fullName} wants to connect with you`,
-              {
-                screen: 'Contacts',
-              },
-            );
-          }
-        } catch (notifyError) {
-          this.logger.error('Failed to send push notification to seller for invite', notifyError);
+      try {
+        const sellerTokens = await this.userDeviceTokenService.getTokensByUser(BigInt(seller.id));
+        if (sellerTokens.length > 0) {
+          const fullName = customer.username || customer.phone_number || 'Customer';
+          await this.notificationService.sendPushNotification(
+            sellerTokens,
+            'New connection request',
+            `Customer ${fullName} wants to connect with you`,
+            {
+              screen: 'Contacts',
+            },
+          );
         }
+      } catch (notifyError) {
+        this.logger.error('Failed to send push notification to seller for invite', notifyError);
       }
 
       return invitation;
@@ -602,6 +600,21 @@ export class AuthService {
         dto.invitation_status === InvitationStatus.CANCELLED
       ) {
         await invitationRepository.delete({ id: invitation.id });
+        if (customerId && sellerId) {
+          await invitationRepository.update(
+            {
+              seller_id: BigInt(sellerId),
+              customer_id: BigInt(customerId),
+              invite_for: InvitationRecipient.CUSTOMER,
+              status: InvitationStatus.REQUESTED,
+            },
+            {
+              status: InvitationStatus.PENDING,
+              invite_accepted_at: () => 'NULL',
+              invite_cancelled_at: () => 'NULL',
+            },
+          );
+        }
       }
     }
 
@@ -675,8 +688,13 @@ export class AuthService {
           );
 
           if (sellerTokens.length > 0) {
-            const fullName = contact?.full_name || invitedUser.username || 'User';
-            const actionMessage = `User ${fullName} has accepted your invitation`;
+            const displayName = this.invitationAccepteeDisplayName(
+              contact?.full_name,
+              invitedUser.username,
+            );
+            const actionMessage = displayName
+              ? `User ${displayName} has accepted your invitation`
+              : `User has accepted your invitation`;
 
             // Send push notification
             await this.sendPushNotificationSafely(
@@ -701,7 +719,7 @@ export class AuthService {
       }
     }
 
-    // Send notification to customer when seller accepts seller-target invite
+    // Send notification to customer when seller accepts seller-target invite (always when tokens exist; no notification-pref gate)
     try {
       if (
         actorIsSeller &&
@@ -712,7 +730,6 @@ export class AuthService {
         const customer = await userRepository.findOne({
           where: {
             id: BigInt(customerId),
-            notification: true,
             is_deleted: false,
           },
         });
@@ -723,7 +740,15 @@ export class AuthService {
           );
 
           if (customerTokens.length > 0) {
-            const sellerName = invitation.seller?.username || 'Seller';
+            let sellerName = invitation.seller?.username;
+            if (!sellerName && sellerId) {
+              const sellerRow = await userRepository.findOne({
+                where: { id: BigInt(sellerId) },
+              });
+              sellerName = sellerRow?.username ?? 'Seller';
+            } else {
+              sellerName = sellerName ?? 'Seller';
+            }
             const customerMessage = `You have a new contact with ${sellerName}`;
 
             await this.sendPushNotificationSafely(
@@ -806,12 +831,17 @@ export class AuthService {
               const contactRow = await contactRepository.findOne({
                 where: { id: BigInt(invitation.contact_id!) },
               });
-              const fullName =
-                contactRow?.full_name || invitedUser.username || 'User';
+              const displayName = this.invitationAccepteeDisplayName(
+                contactRow?.full_name,
+                invitedUser.username,
+              );
+              const body = displayName
+                ? `User ${displayName} has accepted your invitation`
+                : `User has accepted your invitation`;
               await this.notificationService.sendPushNotification(
                 sellerTokens,
                 'Invitation',
-                `User ${fullName} has accepted your invitation`,
+                body,
                 { screen: 'Contacts' },
               );
             }
@@ -852,6 +882,18 @@ export class AuthService {
     }
 
     throw new BusinessException(Messages.INVALID_INPUT, 'INVALID_INPUT');
+  }
+
+  /** Name for "User {name} has accepted…" — empty when missing or generic so we do not show "User User" / "User user". */
+  private invitationAccepteeDisplayName(
+    fullName?: string | null,
+    username?: string | null,
+  ): string {
+    const raw = (fullName?.trim() || username?.trim() || '') as string;
+    if (!raw || raw.toLowerCase() === 'user') {
+      return '';
+    }
+    return raw;
   }
 
   private async sendPushNotificationSafely(
