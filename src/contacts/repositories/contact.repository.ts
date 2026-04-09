@@ -133,14 +133,37 @@ export class ContactRepository extends BaseRepository<Contact> {
   }
 
   async findBySellerId(sellerId: number | bigint): Promise<Contact[]> {
-    return this.repository
+    const query = this.repository
       .createQueryBuilder('contact')
       .leftJoinAndSelect('contact.seller', 'seller')
       .leftJoinAndSelect('contact.invited_user', 'invited_user')
+      .leftJoin(
+        qb =>
+          qb
+            .select('ci.contact_id', 'contact_id')
+            .addSelect('MAX(ci.id)', 'latest_invitation_id')
+            .from('contact_invitations', 'ci')
+            .groupBy('ci.contact_id'),
+        'latest_invitation',
+        'latest_invitation.contact_id = contact.id',
+      )
+      .leftJoin(
+        'contact_invitations',
+        'invitation',
+        'invitation.id = latest_invitation.latest_invitation_id',
+      )
+      .addSelect('invitation.invite_type', 'invite_type')
       .where('contact.seller_id = :sellerId', { sellerId })
       .andWhere('(invited_user.is_deleted = false OR invited_user.id IS NULL)')
-      .orderBy('contact.created_at', 'DESC')
-      .getMany();
+      .orderBy('contact.created_at', 'DESC');
+
+    const { entities, raw } = await query.getRawAndEntities();
+
+    return entities.map((contact, index) =>
+      Object.assign(contact, {
+        invite_type: raw[index]?.invite_type ?? null,
+      }),
+    );
   }
   async findByCustomerId(CustomerId: number): Promise<Contact[]> {
     return this.repository.find({
