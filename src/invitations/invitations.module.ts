@@ -12,11 +12,15 @@ import { EmailModule } from 'src/common/modules/email.module';
 import { ConfigModule } from '@nestjs/config';
 import { TwilioMessagingService } from 'src/common/services/twilio-messaging.service';
 import { FilesModule } from 'src/files/files.module';
+import { User } from 'src/users/entities/user.entity';
+import { JwtModule } from '@nestjs/jwt';
+import { InvitationGateway } from './invitation.gateway';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Invitation, Contact, OtpVerification]),
+    TypeOrmModule.forFeature([Invitation, Contact, User, OtpVerification]),
     ConfigModule,
+    JwtModule.register({}),
     EmailModule,
     FilesModule,
   ],
@@ -41,7 +45,8 @@ import { FilesModule } from 'src/files/files.module';
     },
     SMSInvitationStrategy,
     EmailInvitationStrategy,
+    InvitationGateway,
   ],
-  exports: [InjectionToken.INVITATION_SERVICE, InvitationService],
+  exports: [InjectionToken.INVITATION_SERVICE, InvitationService, InvitationGateway],
 })
 export class InvitationsModule {}

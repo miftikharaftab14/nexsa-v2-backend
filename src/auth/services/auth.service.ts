@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, Logger, HttpStatus } from '@nestjs/common';
 import { SignupDto } from '../dto/signup.dto';
 import { LoginDto } from '../dto/login.dto';
 import { VerifyOtpDto } from '../dto/verify-otp.dto';
@@ -16,12 +16,18 @@ import { IContactUpdate } from 'src/contacts/interfaces/IContactUpdate.interface
 import { ContactStatus } from 'src/common/enums/contact-status.enum';
 import { Invitation } from 'src/invitations/entities/invitation.entity';
 import { AcceptInviteDto } from '../dto/accept-invite.dto';
+import { InviteSellerDto } from '../dto/invite-seller.dto';
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { UserDeviceTokenService } from '../../users/services/user-device-token.service';
 import { NotificationService } from '../../common/services/notification.service';
-import { InvitationStatus } from '../../common/enums/contact-invitation.enum';
+import {
+  InvitationRecipient,
+  InvitationStatus,
+  InvitationType,
+} from '../../common/enums/contact-invitation.enum';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { InvitationGateway } from 'src/invitations/invitation.gateway';
 
 @Injectable()
 export class AuthService {
@@ -38,6 +44,7 @@ export class AuthService {
     private readonly contactService: IContactUpdate,
     private readonly userDeviceTokenService: UserDeviceTokenService,
     private readonly notificationService: NotificationService,
+    private readonly invitationGateway: InvitationGateway,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -74,7 +81,8 @@ export class AuthService {
 
       const user = await this.userService.create(dto);
       this.logger.log(LogMessages.AUTH_SIGNUP_SUCCESS, dto.phone_number);
-      return user;
+      const inviteUrl = this.userService.getInviteUrl(user);
+      return { ...user, inviteUrl } as User & { inviteUrl: string | null };
     } catch (error: unknown) {
       if (error instanceof BusinessException) {
         throw error;
@@ -92,7 +100,7 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<{
     message: string;
-    user: User;
+    user: User & { inviteUrl: string | null };
     invitations: Invitation[] | null;
     contacts: Contact[] | null;
     token: string | null;
@@ -104,27 +112,69 @@ export class AuthService {
       let invitaions: Invitation[] | null = null;
       let contacts: Contact[] | null = null;
       let new_created_user = false;
-      if (dto.role === UserRole.CUSTOMER) {
-        if (!dto.deepLinktoken)
-          invitaions = await this.invitaionService.getInvitationByNumber(dto.phone_number);
-        else invitaions = await this.invitaionService.getInvitationByToken(dto.deepLinktoken);
 
-        if (invitaions && invitaions.length > 0) {
-          if (!user) {
-            user = await this.userService.create({
-              phone_number: dto.phone_number,
-              role: UserRole.CUSTOMER,
-            });
-            new_created_user = true;
-            this.logger.log(
-              LogMessages.AUTH_LOGIN_SUCCESS,
-              `New user created - ${user.phone_number}`,
-            );
+      if (dto.role === UserRole.CUSTOMER) {
+        if (!user) {
+          user = await this.userService.create({
+            phone_number: dto.phone_number,
+            role: UserRole.CUSTOMER,
+          });
+          new_created_user = true;
+          this.logger.log(
+            LogMessages.AUTH_LOGIN_SUCCESS,
+            `New user created - ${user.phone_number}`,
+          );
+        }
+
+        invitaions = await this.invitaionService.getInvitationsByCustomerId(user.id);
+        if (dto.seller_id) {
+          const byPhone = await this.invitaionService.getInvitationByNumber(dto.phone_number);
+          const merged = new Map<string, Invitation>();
+          for (const inv of [...(invitaions ?? []), ...byPhone]) {
+            merged.set(String(inv.id), inv);
           }
+          invitaions = Array.from(merged.values()).filter(
+            invitation => Number(invitation.seller_id) === dto.seller_id,
+          );
         }
       }
 
       if (user) {
+        if (dto.role === UserRole.CUSTOMER && dto.seller_id) {
+          try {
+            const existingContact = await this.contactService.findBySellerAndCustomer(
+              dto.seller_id,
+              BigInt(user.id),
+            );
+            if (!existingContact) {
+              const hasAnyInviteForThisSeller = (invitaions ?? []).some(
+                invitation =>
+                  invitation.invite_for === InvitationRecipient.CUSTOMER &&
+                  (invitation.status === InvitationStatus.PENDING ||
+                    invitation.status === InvitationStatus.REQUESTED),
+              );
+
+              if (!hasAnyInviteForThisSeller) {
+                const newInvitation = await this.invitaionService.createInvitationForCustomer(
+                  BigInt(dto.seller_id),
+                  BigInt(user.id),
+                  InvitationType.LINK,
+                  InvitationRecipient.CUSTOMER,
+                );
+                if (!invitaions) {
+                  invitaions = [];
+                }
+                invitaions.push(newInvitation);
+              }
+            }
+          } catch (error) {
+            this.logger.error(
+              'Failed to ensure invitation exists for customer login with seller_id',
+              error,
+            );
+          }
+        }
+
         const token = this.jwtService.sign({ sub: user.id, role: user.role });
         this.logger.log(LogMessages.AUTH_LOGIN_SUCCESS, dto.phone_number);
         if (dto.deviceToken) {
@@ -135,12 +185,19 @@ export class AuthService {
             dto.deviceOs,
           );
         }
+        if (dto.role === UserRole.SELLER) {
+          invitaions = await this.invitaionService.getAcceptedInvitationsBySellerId(user.id);
+        }
         if (dto.role === UserRole.CUSTOMER) {
           contacts = await this.contactService.findAllByInvitedUserId(user.id);
+          if (dto.seller_id && contacts) {
+            contacts = contacts.filter(contact => Number(contact.seller_id) === dto.seller_id);
+          }
         }
+        const inviteUrl = this.userService.getInviteUrl(user);
         return {
           message: LogMessages.AUTH_LOGIN_SUCCESS,
-          user: user,
+          user: { ...user, inviteUrl },
           invitations: invitaions,
           contacts: contacts,
           token: token,
@@ -217,12 +274,103 @@ export class AuthService {
     return { message: otpResult.message };
   }
 
-  async acceptInvite(dto: AcceptInviteDto): Promise<{ message: string; data: Invitation }> {
+  async inviteSeller(
+    customerId: number,
+    dto: InviteSellerDto,
+  ): Promise<Invitation> {
+    try {
+      const customer = await this.userService.findOne(customerId);
+      if (!customer) {
+        throw new BusinessException(Messages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+      }
+
+      if (customer.role !== UserRole.CUSTOMER) {
+        throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+          role: 'Only customers can invite sellers',
+        });
+      }
+
+      const seller = await this.userService.findOne(dto.seller_id);
+      if (!seller || seller.is_deleted) {
+        throw new BusinessException(Messages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+      }
+
+      if (seller.role !== UserRole.SELLER) {
+        throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+          role: 'Target user must be a seller',
+        });
+      }
+
+      const existingContact = await this.contactService.findBySellerAndCustomer(
+        dto.seller_id,
+        BigInt(customer.id),
+      );
+      if (existingContact) {
+        throw new BusinessException(Messages.CONTACT_ALREADY_EXISTS, 'CONTACT_ALREADY_EXISTS');
+      }
+
+      const existingInvites = await this.invitaionService.getInvitationsByCustomerId(customer.id);
+      const pendingInvite = (existingInvites || []).find(
+        invitation =>
+          Number(invitation.seller_id) === Number(dto.seller_id) &&
+          invitation.invite_for === InvitationRecipient.CUSTOMER &&
+          invitation.status === InvitationStatus.PENDING,
+      );
+
+      let invitation: Invitation;
+      if (pendingInvite) {
+        invitation = pendingInvite;
+      } else {
+        invitation = await this.invitaionService.createInvitationForCustomer(
+          BigInt(dto.seller_id),
+          BigInt(customer.id),
+          InvitationType.LINK,
+          InvitationRecipient.CUSTOMER,
+        );
+      }
+
+      try {
+        const sellerTokens = await this.userDeviceTokenService.getTokensByUser(BigInt(seller.id));
+        if (sellerTokens.length > 0) {
+          const fullName = customer.username || customer.phone_number || 'Customer';
+          await this.notificationService.sendPushNotification(
+            sellerTokens,
+            'New connection request',
+            `Customer ${fullName} wants to connect with you`,
+            {
+              screen: 'Contacts',
+            },
+          );
+        }
+      } catch (notifyError) {
+        this.logger.error('Failed to send push notification to seller for invite', notifyError);
+      }
+
+      return invitation;
+    } catch (error: unknown) {
+      if (error instanceof BusinessException) {
+        throw error;
+      }
+      this.logger.error(
+        'Failed to invite seller',
+        error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new BusinessException(Messages.INVITATION_CREATION_FAILED, 'INVITATION_CREATION_FAILED', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  async acceptInvite(
+    dto: AcceptInviteDto,
+    actorUserId: number,
+  ): Promise<Invitation> {
     this.logger.log(LogMessages.INVITATION_FETCH_SUCCESS, dto.invite_id);
 
     let invitation = await this.invitaionService.getInvitationById(dto.invite_id);
 
-    const invitedUser = await this.userService.findOne(Number(dto.user_id));
+    const invitedUser = await this.userService.findOne(actorUserId);
     if (!invitedUser) {
       throw new BusinessException(Messages.USER_NOT_FOUND, 'USER_NOT_FOUND');
     }
@@ -232,23 +380,300 @@ export class AuthService {
       this.logger.warn('Seller ID not found in invitation', dto.invite_id);
     }
 
-    await this.invitaionService.updateInvitationStatusById(dto.invite_id, dto.invitation_status);
-
-    invitation = await this.invitaionService.getInvitationById(dto.invite_id);
-
-    await this.contactService.update(Number(invitation.contact_id), {
-      invited_user_id: Number(dto.user_id),
-      status: ContactStatus.ACCEPTED,
-    });
-    
     const contactRepository = this.dataSource.getRepository(Contact);
-    const contact = await contactRepository.findOne({
-      where: { id: BigInt(invitation.contact_id) },
-    });
+    const invitationRepository = this.dataSource.getRepository(Invitation);
+    const userRepository = this.dataSource.getRepository(User);
+    const customerId = invitation.contact?.invited_user_id
+      ? Number(invitation.contact.invited_user_id)
+      : invitation.customer_id
+        ? Number(invitation.customer_id)
+        : null;
+    const actorIsSeller = sellerId ? actorUserId === Number(sellerId) : false;
+    const actorIsCustomer = customerId ? actorUserId === customerId : false;
+    const participantOk = actorIsSeller || actorIsCustomer;
 
-    if (sellerId) {
+    const isColdContactCustomerInvite =
+      invitation.contact_id != null &&
+      invitation.invite_for === InvitationRecipient.CUSTOMER &&
+      customerId === null;
+
+    if (
+      !participantOk &&
+      isColdContactCustomerInvite &&
+      invitedUser.role === UserRole.CUSTOMER
+    ) {
+      return this.acceptColdContactCustomerInvite(
+        dto,
+        actorUserId,
+        invitation,
+        invitedUser,
+        sellerId,
+        contactRepository,
+        invitationRepository,
+        userRepository,
+      );
+    }
+
+    if (!participantOk) {
+      throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+        role: 'Only invitation participants can act on this invitation',
+      });
+    }
+
+    if (actorIsCustomer && invitation.invite_for === InvitationRecipient.CUSTOMER) {
+      if (invitation.contact_id != null) {
+        if (dto.invitation_status === InvitationStatus.ACCEPTED) {
+          if (invitation.status !== InvitationStatus.PENDING) {
+            throw new BusinessException(
+              Messages.INVITATION_ALREADY_PROCESSED,
+              'INVITATION_ALREADY_PROCESSED',
+            );
+          }
+          await this.invitaionService.updateInvitationStatusById(
+            dto.invite_id,
+            InvitationStatus.ACCEPTED,
+          );
+          await this.contactService.update(Number(invitation.contact_id), {
+            invited_user_id: customerId as number,
+            status: ContactStatus.ACCEPTED,
+          });
+          if (customerId && !invitation.customer_id) {
+            await invitationRepository.update(
+              { id: invitation.id },
+              { customer_id: BigInt(customerId) },
+            );
+          }
+          invitation = await this.invitaionService.getInvitationById(dto.invite_id);
+        } else if (
+          dto.invitation_status === InvitationStatus.REJECTED ||
+          dto.invitation_status === InvitationStatus.CANCELLED
+        ) {
+          if (invitation.status === InvitationStatus.PENDING) {
+            await this.invitaionService.updateInvitationStatusById(
+              dto.invite_id,
+              dto.invitation_status,
+            );
+            await contactRepository.update(
+              { id: BigInt(invitation.contact_id) },
+              {
+                status: ContactStatus.NEW,
+                invited_user_id: () => 'NULL',
+              },
+            );
+            invitation = await this.invitaionService.getInvitationById(dto.invite_id);
+          } else if (
+            dto.invitation_status === InvitationStatus.CANCELLED &&
+            invitation.status === InvitationStatus.REQUESTED
+          ) {
+            await invitationRepository.update(
+              { id: invitation.id },
+              {
+                status: InvitationStatus.PENDING,
+                invite_accepted_at: () => 'NULL',
+                invite_cancelled_at: () => 'NULL',
+              },
+            );
+            if (customerId && sellerId) {
+              await invitationRepository.delete({
+                seller_id: BigInt(sellerId),
+                customer_id: BigInt(customerId),
+                invite_for: InvitationRecipient.SELLER,
+              });
+            }
+            invitation = await this.invitaionService.getInvitationById(dto.invite_id);
+          } else {
+            await invitationRepository.delete({ id: invitation.id });
+          }
+        }
+      } else if (dto.invitation_status === InvitationStatus.ACCEPTED) {
+        await invitationRepository.update({ id: invitation.id }, { status: InvitationStatus.REQUESTED });
+        invitation = await this.invitaionService.getInvitationById(dto.invite_id);
+        const allInvitations = await this.invitaionService.getInvitationsByCustomerId(customerId as number);
+        const pendingSellerInvite = allInvitations.find(
+          item =>
+            Number(item.seller_id) === Number(sellerId) &&
+            item.invite_for === InvitationRecipient.SELLER &&
+            item.status === InvitationStatus.PENDING,
+        );
+        if (!pendingSellerInvite && customerId && sellerId) {
+          await this.invitaionService.createInvitationForCustomer(
+            BigInt(sellerId),
+            BigInt(customerId),
+            invitation.invite_type || InvitationType.LINK,
+            InvitationRecipient.SELLER,
+          );
+        }
+      } else if (
+        dto.invitation_status === InvitationStatus.REJECTED ||
+        dto.invitation_status === InvitationStatus.CANCELLED
+      ) {
+        if (dto.invitation_status === InvitationStatus.CANCELLED && invitation.status === InvitationStatus.REQUESTED) {
+          // Cancel after accept: keep customer invite and roll it back to PENDING
+          await invitationRepository.update(
+            { id: invitation.id },
+            {
+              status: InvitationStatus.PENDING,
+              invite_accepted_at: () => 'NULL',
+              invite_cancelled_at: () => 'NULL',
+            },
+          );
+
+          // Remove seller-side invite(s) for this pair
+          if (customerId && sellerId) {
+            await invitationRepository.delete({
+              seller_id: BigInt(sellerId),
+              customer_id: BigInt(customerId),
+              invite_for: InvitationRecipient.SELLER,
+            });
+          }
+        } else {
+          await invitationRepository.delete({ id: invitation.id });
+        }
+      }
+    }
+
+    if (
+      actorIsCustomer &&
+      invitation.invite_for === InvitationRecipient.SELLER &&
+      (dto.invitation_status === InvitationStatus.REJECTED ||
+        dto.invitation_status === InvitationStatus.CANCELLED)
+    ) {
+      await invitationRepository.delete({ id: invitation.id });
+      if (dto.invitation_status === InvitationStatus.CANCELLED && customerId && sellerId) {
+        await invitationRepository.update(
+          {
+            seller_id: BigInt(sellerId),
+            customer_id: BigInt(customerId),
+            invite_for: InvitationRecipient.CUSTOMER,
+            status: InvitationStatus.REQUESTED,
+          },
+          {
+            status: InvitationStatus.PENDING,
+            invite_accepted_at: () => 'NULL',
+            invite_cancelled_at: () => 'NULL',
+          },
+        );
+      }
+    }
+
+    let resolvedContactId: bigint | null = invitation.contact_id || null;
+    if (actorIsSeller && invitation.invite_for === InvitationRecipient.SELLER) {
+      if (!customerId || !sellerId) {
+        throw new BusinessException(Messages.INVALID_INPUT, 'INVALID_INPUT');
+      }
+      if (dto.invitation_status === InvitationStatus.ACCEPTED) {
+        let contact = await this.contactService.findBySellerAndCustomer(Number(sellerId), BigInt(customerId));
+        if (!contact) {
+          const customer = await this.userService.findOne(customerId);
+          contact = await contactRepository.save(
+            contactRepository.create({
+              seller_id: BigInt(sellerId),
+              invited_user_id: BigInt(customerId),
+              full_name: customer?.username || '',
+              phone_number: customer?.phone_number,
+              email: customer?.email,
+              status: ContactStatus.ACCEPTED,
+            }),
+          );
+        } else {
+          await this.contactService.update(Number(contact.id), {
+            invited_user_id: customerId || undefined,
+            status: ContactStatus.ACCEPTED,
+          });
+        }
+        resolvedContactId = contact.id;
+        await invitationRepository.update(
+          { id: invitation.id },
+          {
+            status: InvitationStatus.ACCEPTED,
+            contact_id: contact.id,
+            invite_accepted_at: new Date(),
+          },
+        );
+        await invitationRepository.delete({
+          seller_id: BigInt(sellerId),
+          customer_id: BigInt(customerId),
+          invite_for: InvitationRecipient.CUSTOMER,
+        });
+      } else if (
+        dto.invitation_status === InvitationStatus.REJECTED ||
+        dto.invitation_status === InvitationStatus.CANCELLED
+      ) {
+        await invitationRepository.delete({ id: invitation.id });
+        if (customerId && sellerId) {
+          await invitationRepository.update(
+            {
+              seller_id: BigInt(sellerId),
+              customer_id: BigInt(customerId),
+              invite_for: InvitationRecipient.CUSTOMER,
+              status: InvitationStatus.REQUESTED,
+            },
+            {
+              status: InvitationStatus.PENDING,
+              invite_accepted_at: () => 'NULL',
+              invite_cancelled_at: () => 'NULL',
+            },
+          );
+        }
+      }
+    }
+
+    const contact = resolvedContactId
+      ? await contactRepository.findOne({ where: { id: BigInt(resolvedContactId) } })
+      : null;
+
+    const shouldEmitInviteAction =
+      dto.invitation_status === InvitationStatus.ACCEPTED ||
+      dto.invitation_status === InvitationStatus.REJECTED ||
+      dto.invitation_status === InvitationStatus.CANCELLED;
+
+    if (shouldEmitInviteAction) {
+      const oppositeUserId = actorIsSeller ? customerId : sellerId ? Number(sellerId) : null;
+      if (oppositeUserId) {
+        try {
+          const actionMessages: Partial<Record<InvitationStatus, Messages>> = {
+            [InvitationStatus.ACCEPTED]: Messages.INVITATION_ACCEPTED,
+            [InvitationStatus.CANCELLED]: Messages.INVITATION_CANCELLED,
+          };
+          const message =
+            dto.invitation_status === InvitationStatus.REJECTED
+              ? 'Invitation rejected successfully'
+              : actionMessages[dto.invitation_status] ?? Messages.INVITATION_UPDATE_SUCCESS;
+
+          const sellerUser = sellerId
+            ? await userRepository.findOne({ where: { id: BigInt(sellerId) } })
+            : null;
+          const customerUser = customerId
+            ? await userRepository.findOne({ where: { id: BigInt(customerId) } })
+            : null;
+          const socketInvitationData = {
+            ...invitation,
+            seller: invitation.seller ?? sellerUser ?? null,
+            customer: customerUser ?? null,
+          };
+
+          await this.invitationGateway.emitInvitationStatusToUser({
+            receiverUserId: oppositeUserId,
+            response: {
+              success: true,
+              message,
+              status: HttpStatus.OK,
+              data: socketInvitationData,
+            },
+            status: dto.invitation_status,
+            actorUserId,
+          });
+        } catch (socketError) {
+          this.logger.error(
+            `Failed to emit invitation socket event for invite ${dto.invite_id}`,
+            socketError,
+          );
+        }
+      }
+    }
+
+    if (sellerId && actorIsCustomer && dto.invitation_status === InvitationStatus.ACCEPTED) {
       try {
-        const userRepository = this.dataSource.getRepository(User);
         const seller = await userRepository.findOne({
           where: {
             id: BigInt(sellerId),
@@ -263,14 +688,16 @@ export class AuthService {
           );
 
           if (sellerTokens.length > 0) {
-            const fullName = contact?.full_name || invitedUser.username || 'User';
-            const actionMessage =
-              dto.invitation_status === InvitationStatus.ACCEPTED
-                ? `User ${fullName} has accepted your invitation`
-                : `User ${fullName} has rejected your invitation`;
+            const displayName = this.invitationAccepteeDisplayName(
+              contact?.full_name,
+              invitedUser.username,
+            );
+            const actionMessage = displayName
+              ? `User ${displayName} has accepted your invitation`
+              : `User has accepted your invitation`;
 
             // Send push notification
-            await this.notificationService.sendPushNotification(
+            await this.sendPushNotificationSafely(
               sellerTokens,
               'Invitation',
               actionMessage,
@@ -292,6 +719,193 @@ export class AuthService {
       }
     }
 
-    return { message: 'invite accepted', data: invitation };
+    // Send notification to customer when seller accepts seller-target invite (always when tokens exist; no notification-pref gate)
+    try {
+      if (
+        actorIsSeller &&
+        invitation.invite_for === InvitationRecipient.SELLER &&
+        customerId &&
+        dto.invitation_status === InvitationStatus.ACCEPTED
+      ) {
+        const customer = await userRepository.findOne({
+          where: {
+            id: BigInt(customerId),
+            is_deleted: false,
+          },
+        });
+
+        if (customer) {
+          const customerTokens = await this.userDeviceTokenService.getTokensByUser(
+            BigInt(customer.id),
+          );
+
+          if (customerTokens.length > 0) {
+            let sellerName = invitation.seller?.username;
+            if (!sellerName && sellerId) {
+              const sellerRow = await userRepository.findOne({
+                where: { id: BigInt(sellerId) },
+              });
+              sellerName = sellerRow?.username ?? 'Seller';
+            } else {
+              sellerName = sellerName ?? 'Seller';
+            }
+            const customerMessage = `You have a new contact with ${sellerName}`;
+
+            await this.sendPushNotificationSafely(
+              customerTokens,
+              'Invitation',
+              customerMessage,
+              {
+                screen: 'Contacts',
+              },
+            );
+
+            this.logger.log(
+              `Push notification sent to customer ${customer.id} for invitation ${dto.invite_id}`,
+            );
+          }
+        }
+      }
+    } catch (notifyError) {
+      this.logger.error(
+        `Failed to send push notification to customer for invitation ${dto.invite_id}`,
+        notifyError,
+      );
+    }
+
+    if (
+      actorIsSeller &&
+      dto.invitation_status === InvitationStatus.ACCEPTED &&
+      invitation.invite_for === InvitationRecipient.SELLER
+    ) {
+      invitation = await this.invitaionService.getInvitationById(dto.invite_id);
+    }
+
+    return invitation;
+  }
+
+  private async acceptColdContactCustomerInvite(
+    dto: AcceptInviteDto,
+    actorUserId: number,
+    invitation: Invitation,
+    invitedUser: User,
+    sellerId: bigint | undefined,
+    contactRepository: Repository<Contact>,
+    invitationRepository: Repository<Invitation>,
+    userRepository: Repository<User>,
+  ): Promise<Invitation> {
+    if (dto.invitation_status === InvitationStatus.ACCEPTED) {
+      if (invitation.status !== InvitationStatus.PENDING) {
+        throw new BusinessException(
+          Messages.INVITATION_ALREADY_PROCESSED,
+          'INVITATION_ALREADY_PROCESSED',
+        );
+      }
+      await this.invitaionService.updateInvitationStatusById(
+        dto.invite_id,
+        InvitationStatus.ACCEPTED,
+      );
+      await this.contactService.update(Number(invitation.contact_id), {
+        invited_user_id: actorUserId,
+        status: ContactStatus.ACCEPTED,
+      });
+      await invitationRepository.update(
+        { id: invitation.id },
+        { customer_id: BigInt(actorUserId) },
+      );
+
+      if (sellerId) {
+        try {
+          const seller = await userRepository.findOne({
+            where: {
+              id: BigInt(sellerId),
+              notification: true,
+              is_deleted: false,
+            },
+          });
+          if (seller) {
+            const sellerTokens = await this.userDeviceTokenService.getTokensByUser(
+              BigInt(sellerId),
+            );
+            if (sellerTokens.length > 0) {
+              const contactRow = await contactRepository.findOne({
+                where: { id: BigInt(invitation.contact_id!) },
+              });
+              const displayName = this.invitationAccepteeDisplayName(
+                contactRow?.full_name,
+                invitedUser.username,
+              );
+              const body = displayName
+                ? `User ${displayName} has accepted your invitation`
+                : `User has accepted your invitation`;
+              await this.notificationService.sendPushNotification(
+                sellerTokens,
+                'Invitation',
+                body,
+                { screen: 'Contacts' },
+              );
+            }
+          }
+        } catch (notifyError) {
+          this.logger.error(
+            `Failed to send push notification to seller ${sellerId} for invitation ${dto.invite_id}`,
+            notifyError,
+          );
+        }
+      }
+
+      return this.invitaionService.getInvitationById(dto.invite_id);
+    }
+
+    if (
+      dto.invitation_status === InvitationStatus.REJECTED ||
+      dto.invitation_status === InvitationStatus.CANCELLED
+    ) {
+      if (invitation.status !== InvitationStatus.PENDING) {
+        throw new BusinessException(
+          Messages.INVITATION_ALREADY_PROCESSED,
+          'INVITATION_ALREADY_PROCESSED',
+        );
+      }
+      await this.invitaionService.updateInvitationStatusById(
+        dto.invite_id,
+        dto.invitation_status,
+      );
+      await contactRepository.update(
+        { id: BigInt(invitation.contact_id!) },
+        {
+          status: ContactStatus.NEW,
+          invited_user_id: () => 'NULL',
+        },
+      );
+      return this.invitaionService.getInvitationById(dto.invite_id);
+    }
+
+    throw new BusinessException(Messages.INVALID_INPUT, 'INVALID_INPUT');
+  }
+
+  /** Name for "User {name} has accepted…" — empty when missing or generic so we do not show "User User" / "User user". */
+  private invitationAccepteeDisplayName(
+    fullName?: string | null,
+    username?: string | null,
+  ): string {
+    const raw = (fullName?.trim() || username?.trim() || '') as string;
+    if (!raw || raw.toLowerCase() === 'user') {
+      return '';
+    }
+    return raw;
+  }
+
+  private async sendPushNotificationSafely(
+    tokens: string[],
+    title: string,
+    body: string,
+    data: Record<string, string>,
+  ): Promise<void> {
+    try {
+      await this.notificationService.sendPushNotification(tokens, title, body, data);
+    } catch (error) {
+      this.logger.error('Push notification failed (non-blocking)', error);
+    }
   }
 }

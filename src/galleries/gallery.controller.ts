@@ -13,7 +13,7 @@ import {
 import { GalleryService } from './gallery.service';
 import { CreateGalleryDto } from './dto/create-gallery.dto';
 import { UpdateGalleryDto } from './dto/update-gallery.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -36,6 +36,29 @@ export class GalleryController {
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - Seller access required' })
+  @ApiBody({
+    description:
+      'For type=gallery use {name, description?}. For type=link use {name, url, description?}.',
+    schema: {
+      oneOf: [
+        {
+          example: {
+            type: 'gallery',
+            name: 'Modern Art',
+            description: 'Optional description',
+          },
+        },
+        {
+          example: {
+            type: 'link',
+            name: 'My Portfolio',
+            url: 'https://example.com/portfolio',
+            description: 'Optional description',
+          },
+        },
+      ],
+    },
+  })
   async create(@Body() createGalleryDto: CreateGalleryDto, @CurrentUser() user: CurrentUserType) {
     const gallery = await this.galleryService.create(createGalleryDto, user.userId);
     return {
@@ -100,6 +123,18 @@ export class GalleryController {
   @ApiResponse({ status: 403, description: 'Forbidden - Seller access required' })
   @ApiResponse({ status: 404, description: 'Gallery not found' })
   @ApiParam({ name: 'id', type: 'number', description: 'Gallery ID' })
+  @ApiBody({
+    description:
+      'Update any field. If final type is link, url is required. If final type is gallery, url is not allowed.',
+    schema: {
+      example: {
+        type: 'link',
+        name: 'Updated Portfolio',
+        url: 'https://example.com/new',
+        description: 'Optional description',
+      },
+    },
+  })
   async update(@Param('id', ParseIntPipe) id: number, @Body() updateGalleryDto: UpdateGalleryDto) {
     const gallery = await this.galleryService.update(id, updateGalleryDto);
     return {

@@ -13,6 +13,8 @@ import { ConfigService } from '@nestjs/config';
 import { ExtendedUser } from '../interfaces/user.interface';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { UpdateUserFlagsDto } from '../dto/UpdateUserFlags.dto';
+import { Messages } from 'src/common/enums/messages.enum';
+import { UpdateInviteLinkDto } from '../dto/update-invite-link.dto';
 
 /**
  * Service responsible for managing user-related operations including CRUD operations,
@@ -172,6 +174,7 @@ export class UserService {
         ...(updateUserDto.link && { link: updateUserDto.link }),
         ...(updateUserDto.is_deleted && { is_deleted: updateUserDto.is_deleted }),
         ...(updateUserDto.link_name && { link_name: updateUserDto.link_name }),
+        ...(updateUserDto.invite_url && { invite_url: updateUserDto.invite_url }),
         ...(updateUserDto.first_message_send && {
           first_message_send: updateUserDto.first_message_send,
         }),
@@ -420,5 +423,103 @@ export class UserService {
   }
   userFlagsUpdate(userId: bigint, updateUserFlagsDto: UpdateUserFlagsDto) {
     return this.userRepo.userFlagsUpdate(userId.toString(), updateUserFlagsDto);
+  }
+
+  /**
+   * Builds full invite URL from stored path (invite_url). Base URL is not stored in DB.
+   * Returns null for non-sellers or when invite_url is not set.
+   */
+  getInviteUrl(user: User | null): string | null {
+    if (!user?.invite_url) return null;
+    const baseUrl =
+      this.configService.get<string>('SELLER_INVITE_BASE_URL') ||
+      this.configService.get<string>('APP_URL') ||
+      '';
+    if (!baseUrl) return user.invite_url;
+    return `${baseUrl.replace(/\/+$/, '')}/${user.invite_url}`;
+  }
+
+  /**
+   * Returns full invite link for a seller using existing invite_url.
+   * Does NOT auto-generate any path; seller must set invite_url explicitly.
+   */
+  async generateOrGetSellerInviteLink(
+    userId: bigint | number,
+  ): Promise<{ link: string; invite_url: string }> {
+    const repository = this.dataSource.getRepository(User);
+    const user = await repository.findOne({
+      where: { id: BigInt(userId), is_deleted: false },
+    });
+
+    if (!user) {
+      throw new BusinessException(LogMessages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+    }
+
+    if (user.role !== UserRole.SELLER) {
+      throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+        role: 'Only sellers can have invite links',
+      });
+    }
+
+    if (!user.invite_url) {
+      throw new BusinessException(Messages.INVITATION_NOT_FOUND, 'INVITE_URL_NOT_SET', {
+        message: 'Invite URL is not set. Please update invite_url first.',
+      });
+    }
+
+    const link = this.getInviteUrl(user) ?? user.invite_url;
+    return { link, invite_url: user.invite_url };
+  }
+
+  /**
+   * Allows a seller to explicitly set/update their invite_url (path/slug).
+   * Ensures uniqueness and that only sellers can perform this action.
+   */
+  async updateInviteUrlForSeller(
+    userId: bigint | number,
+    payload: UpdateInviteLinkDto,
+  ): Promise<{ link: string; invite_url: string }> {
+    const repository = this.dataSource.getRepository(User);
+    const user = await repository.findOne({
+      where: { id: BigInt(userId), is_deleted: false },
+    });
+
+    if (!user) {
+      throw new BusinessException(LogMessages.USER_NOT_FOUND, 'USER_NOT_FOUND');
+    }
+
+    if (user.role !== UserRole.SELLER) {
+      throw new BusinessException(Messages.FORBIDDEN, 'FORBIDDEN', {
+        role: 'Only sellers can update invite links',
+      });
+    }
+
+    const rawSlug = payload.invite_url.trim();
+    const slug = rawSlug
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    if (!slug) {
+      throw new BusinessException(Messages.INVALID_INPUT, 'INVALID_INVITE_URL', {
+        message: 'Invite URL cannot be empty after formatting.',
+      });
+    }
+
+    const existingWithSameSlug = await repository.findOne({
+      where: { invite_url: slug as unknown as string },
+    });
+
+    if (existingWithSameSlug && existingWithSameSlug.id !== user.id) {
+      throw new BusinessException(Messages.INVITATION_ALREADY_PROCESSED, 'INVITE_URL_NOT_UNIQUE', {
+        message: 'This invite URL is already in use. Please choose a different one.',
+      });
+    }
+
+    user.invite_url = slug;
+    await repository.save(user);
+
+    const link = this.getInviteUrl(user) ?? user.invite_url;
+    return { link, invite_url: user.invite_url };
   }
 }

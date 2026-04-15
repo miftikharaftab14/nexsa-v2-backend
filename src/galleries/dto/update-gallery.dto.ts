@@ -1,8 +1,19 @@
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, IsUrl } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { StoredFile, StoredFileDto } from 'src/files/types/storedFile';
+import { GalleryType } from 'src/common/enums/gallery-type.enum';
 
 export class UpdateGalleryDto {
+  @ApiProperty({
+    description: 'Gallery type',
+    enum: GalleryType,
+    example: GalleryType.LINK,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(GalleryType)
+  type?: GalleryType;
+
   @ApiProperty({
     description: 'Name of the gallery',
     example: 'Modern Art',
@@ -20,6 +31,15 @@ export class UpdateGalleryDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiProperty({
+    description: 'Link URL (required if gallery type is link)',
+    example: 'https://example.com/portfolio',
+    required: false,
+  })
+  @IsOptional()
+  @IsUrl()
+  url?: string;
 
   @ApiProperty({
     description: 'Notification enable in gallery',

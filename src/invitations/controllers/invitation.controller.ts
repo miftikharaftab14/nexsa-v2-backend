@@ -4,6 +4,8 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { InvitationService } from '../services/invitation.service';
 import { Descriptions } from 'src/common/enums/descriptions.enum';
 import { _200_invitation, _200_invitations, _404_invitation } from '../documentation/api.response';
+import { CurrentUser } from 'src/common/decorators/user.decorator';
+import { CurrentUserType } from 'src/common/types/current-user.interface';
 import { Response } from 'express';
 import { join } from 'path';
 
@@ -26,15 +28,6 @@ export class InvitationController {
   getPage(@Res() res: Response) {
     return res.sendFile(join(__dirname, '..', '..', '..', 'public', 'invite.html'));
   }
-  @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: Descriptions.GET_INVITATION_BY_ID_SUMMARY })
-  @ApiResponse(_200_invitation)
-  @ApiResponse(_404_invitation)
-  async getInvitationById(@Param('id') id: string) {
-    return this.invitationService.getInvitationById(BigInt(+id));
-  }
 
   @Get('contact/:contactId')
   @UseGuards(JwtAuthGuard)
@@ -54,5 +47,27 @@ export class InvitationController {
   @ApiResponse(_404_invitation)
   async getInvitationsByUsersPhoneNumber(@Param('phoneNumber') phoneNumber: string) {
     return this.invitationService.getInvitationByNumber(phoneNumber);
+  }
+
+  @Get('seller')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Get all pending invitations for a seller' })
+  @ApiResponse(_200_invitations)
+  @ApiResponse(_404_invitation)
+  async getAcceptedInvitationsBySellerId(@CurrentUser() currentUser: CurrentUserType) {
+    return this.invitationService.getAcceptedInvitationsBySellerId(currentUser.userId);
+  }
+
+
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: Descriptions.GET_INVITATION_BY_ID_SUMMARY })
+  @ApiResponse(_200_invitation)
+  @ApiResponse(_404_invitation)
+  async getInvitationById(@Param('id') id: string) {
+    return this.invitationService.getInvitationById(BigInt(+id));
   }
 }

@@ -44,6 +44,7 @@ export enum Messages {
   CONTACT_FETCHED = 'Contact fetched successfully',
   CONTACTS_FETCHED = 'Contacts fetched successfully',
   CONTACT_NOT_FOUND = 'Contact not found',
+  CONTACT_ALREADY_EXISTS = 'Contact already exists',
   CONTACT_CREATION_FAILED = 'Failed to create contact',
   CONTACT_UPDATE_FAILED = 'Failed to update contact',
   CONTACT_DELETE_FAILED = 'Failed to delete contact',
@@ -51,7 +52,8 @@ export enum Messages {
 
   //Contact Invitaion
   INVITATION_CREATED = 'Invitation created successfully',
-  INVITATION_CANCELLED = 'Invitation cancelled by seller',
+  INVITATION_CANCELLED = 'Invitation cancelled successfully',
+  INVITATION_REJECTED = 'Invitation rejected successfully',
   INVITATION_ACCEPTED = 'Invitation accepted successfully',
   INVITATION_NOT_FOUND = 'Invitation not found',
   INVITATION_ALREADY_PROCESSED = 'Invitation has already been processed',
@@ -62,6 +64,7 @@ export enum Messages {
   INVITATIONS_FETCHED = 'Invitations fetched successfully',
   INVITATION_UPDATE_FAILED = 'Failed to update invitation',
   INVITATION_UPDATE_SUCCESS = 'Invitation updated successfully',
+  INVITATION_SENT_TO_SELLER = 'Invitation sent to seller',
   // Profile Picture Messages
   PROFILE_PICTURE_UPDATED = 'Profile picture updated successfully',
   INVALID_FILE_TYPE = 'Invalid file type. Only jpg, jpeg, and png files are allowed.',

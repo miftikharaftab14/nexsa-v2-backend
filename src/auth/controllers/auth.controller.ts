@@ -21,6 +21,13 @@ import {
 import { Messages } from 'src/common/enums/messages.enum';
 import { User } from '../../users/entities/user.entity';
 import { AcceptInviteDto } from '../dto/accept-invite.dto';
+import { InviteSellerDto } from '../dto/invite-seller.dto';
+import { CurrentUser } from 'src/common/decorators/user.decorator';
+import { CurrentUserType } from 'src/common/types/current-user.interface';
+import { Roles } from '../decorators/roles.decorator';
+import { UserRole } from 'src/common/enums/user-role.enum';
+import { Invitation } from 'src/invitations/entities/invitation.entity';
+import { InvitationStatus } from 'src/common/enums/contact-invitation.enum';
 
 @Controller('auth')
 @ApiTags('auth')
@@ -100,14 +107,47 @@ export class AuthController {
   @ApiResponse(_200_resendOtp)
   @HttpCode(HttpStatus.OK)
   async acceptInvite(
+    @CurrentUser() currentUser: CurrentUserType,
     @Body() acceptInviteDto: AcceptInviteDto,
-  ): Promise<ApiResponseInterface<{ message: string }>> {
-    const result = await this.authService.acceptInvite(acceptInviteDto);
+  ): Promise<ApiResponseInterface<Invitation>> {
+    const invitation = await this.authService.acceptInvite(
+      acceptInviteDto,
+      Number(currentUser.userId),
+    );
+    const actionMessages: Partial<Record<InvitationStatus, Messages>> = {
+      [InvitationStatus.ACCEPTED]: Messages.INVITATION_ACCEPTED,
+      [InvitationStatus.CANCELLED]: Messages.INVITATION_CANCELLED,
+      [InvitationStatus.REJECTED]: Messages.INVITATION_REJECTED,
+    };
+    const message =
+      actionMessages[acceptInviteDto.invitation_status] ?? Messages.INVITATION_UPDATE_SUCCESS;
     return {
       success: true,
-      message: Messages.INVITATION_ACCEPTED,
+      message,
       status: HttpStatus.OK,
-      data: result,
+      data: invitation,
+    };
+  }
+
+  @Post('invite-seller')
+  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: 'Send an invite to a seller from a customer' })
+  @ApiResponse(_200_login)
+  @HttpCode(HttpStatus.OK)
+  async inviteSeller(
+    @CurrentUser() currentUser: CurrentUserType,
+    @Body(new CustomValidationPipe()) inviteSellerDto: InviteSellerDto,
+  ): Promise<ApiResponseInterface<Invitation>> {
+    const invitation = await this.authService.inviteSeller(
+      Number(currentUser.userId),
+      inviteSellerDto,
+    );
+    return {
+      success: true,
+      message: Messages.INVITATION_SENT_TO_SELLER,
+      status: HttpStatus.OK,
+      data: invitation,
     };
   }
 }

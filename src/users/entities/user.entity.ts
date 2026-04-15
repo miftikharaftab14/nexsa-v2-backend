@@ -73,8 +73,12 @@ export class User {
   @OneToOne(() => Gallery, gallery => gallery.user)
   gallery: Gallery;
 
-  @Column({ name: 'link_name', type: 'text' })
-  link_name: string;
+  @Column({ name: 'link_name', type: 'text', nullable: true })
+  link_name: string | null;
+
+  /** Unique invite path/slug (no base URL). Used to build full inviteUrl at runtime. Sellers only. */
+  @Column({ name: 'invite_url', type: 'text', unique: true, nullable: true })
+  invite_url: string | null;
 
   @CreateDateColumn()
   created_at: Date;

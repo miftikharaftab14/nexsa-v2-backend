@@ -11,6 +11,7 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { GalleryImage } from '../../gallery-image/entities/gallery-image.entity';
 import { File } from '../../files/entities/file.entity';
+import { GalleryType } from '../../common/enums/gallery-type.enum';
 
 @Entity('galleries')
 export class Gallery {
@@ -20,8 +21,14 @@ export class Gallery {
   @Column({ name: 'name' })
   name: string;
 
+  @Column({ type: 'varchar', length: 20, default: GalleryType.GALLERY })
+  type: GalleryType;
+
   @Column({ type: 'text', nullable: true })
   description: string;
+
+  @Column({ type: 'text', nullable: true })
+  url: string | null;
 
   @Column({ name: 'user_id', type: 'bigint', nullable: false })
   userId: bigint;
