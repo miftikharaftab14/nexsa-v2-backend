@@ -26,7 +26,7 @@ import {
   InvitationType,
 } from '../../common/enums/contact-invitation.enum';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { InvitationGateway } from 'src/invitations/invitation.gateway';
 
 @Injectable()
@@ -488,14 +488,23 @@ export class AuthService {
       } else if (dto.invitation_status === InvitationStatus.ACCEPTED) {
         await invitationRepository.update({ id: invitation.id }, { status: InvitationStatus.REQUESTED });
         invitation = await this.invitaionService.getInvitationById(dto.invite_id);
-        const allInvitations = await this.invitaionService.getInvitationsByCustomerId(customerId as number);
-        const pendingSellerInvite = allInvitations.find(
-          item =>
-            Number(item.seller_id) === Number(sellerId) &&
-            item.invite_for === InvitationRecipient.SELLER &&
-            item.status === InvitationStatus.PENDING,
-        );
-        if (!pendingSellerInvite && customerId && sellerId) {
+        const existingActiveSellerInvite =
+          customerId && sellerId
+            ? await invitationRepository.findOne({
+                where: {
+                  seller_id: BigInt(sellerId),
+                  customer_id: BigInt(customerId),
+                  invite_for: InvitationRecipient.SELLER,
+                  status: In([
+                    InvitationStatus.PENDING,
+                    InvitationStatus.REQUESTED,
+                    InvitationStatus.ACCEPTED,
+                  ]),
+                },
+                order: { created_at: 'DESC' },
+              })
+            : null;
+        if (!existingActiveSellerInvite && customerId && sellerId) {
           await this.invitaionService.createInvitationForCustomer(
             BigInt(sellerId),
             BigInt(customerId),
