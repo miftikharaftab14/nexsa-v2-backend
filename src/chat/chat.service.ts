@@ -93,6 +93,44 @@ export class ChatService {
     return this.messageRepository.save(newMessage);
   }
 
+  async editMessage(
+    contactId: bigint,
+    messageId: number,
+    editorId: bigint,
+    content: string,
+  ): Promise<Message> {
+    const message = await this.messageRepository.findOne({
+      where: { id: messageId, contactId },
+    });
+
+    if (!message) {
+      throw new NotFoundException('Message not found');
+    }
+
+    if (message.senderId !== editorId) {
+      throw new UnauthorizedException('Only sender can edit this message');
+    }
+
+    message.content = content.trim();
+    return this.messageRepository.save(message);
+  }
+
+  async deleteMessage(contactId: bigint, messageId: number, requesterId: bigint): Promise<void> {
+    const message = await this.messageRepository.findOne({
+      where: { id: messageId, contactId },
+    });
+
+    if (!message) {
+      throw new NotFoundException('Message not found');
+    }
+
+    if (message.senderId !== requesterId) {
+      throw new UnauthorizedException('Only sender can delete this message');
+    }
+
+    await this.messageRepository.softDelete({ id: messageId, contactId });
+  }
+
   getCreatedAtCondition(lastDelete?: { createdAt?: Date }, blockSince?: Date) {
     if (blockSince && lastDelete?.createdAt) {
       return Between(lastDelete.createdAt, blockSince);

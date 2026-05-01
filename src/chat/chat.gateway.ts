@@ -33,6 +33,8 @@ import { AuthenticatedSocket } from './type/socket-client';
 import { MarkReadChatDto } from './dto/mark-read-chat.dto';
 import { File } from 'src/files/entities/file.entity';
 import { ProductChatInitiateDto } from './dto/product-chat-initiate.dto';
+import { EditMessageDto } from './dto/edit-message.dto';
+import { DeleteMessageDto } from './dto/delete-message.dto';
 import { GalleryImagesService } from 'src/gallery-image/gallery-images.service';
 import { ChatResult, ChatType, TransformedBroadcast } from 'src/common/types/chat';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -166,6 +168,23 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       this.logger.warn(
         `Disconnect cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+    }
+  }
+
+  private async emitToParticipants(contact: Contact, event: string, payload: Record<string, unknown>) {
+    const participantIds = [contact.seller_id, contact.invited_user_id].filter(Boolean);
+    const socketIds = await Promise.all(
+      participantIds.map(async userId =>
+        this.redis.get(`${this.redisPrefix}:user_socket:${userId?.toString() ?? ''}`),
+      ),
+    );
+
+    const uniqueSocketIds = Array.from(
+      new Set(socketIds.filter((socketId): socketId is string => Boolean(socketId))),
+    );
+
+    for (const socketId of uniqueSocketIds) {
+      this.server.to(socketId).emit(event, payload);
     }
   }
 
@@ -366,6 +385,80 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       client.emit('error_message', { message });
     }
   }
+
+  @SubscribeMessage('edit_message')
+  async handleEditMessage(
+    @MessageBody() data: EditMessageDto,
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    try {
+      const user = client.user;
+      if (!user) {
+        throw new UnauthorizedException('Unauthorized');
+      }
+
+      const contactResp = await this.contactService.findOne(data.contactId);
+      const contact = contactResp?.data;
+      if (!contact) {
+        throw new NotFoundException('Chat/contact not found');
+      }
+
+      const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
+      if (!isParticipant) {
+        throw new ForbiddenException('You are not a participant of this chat.');
+      }
+
+      const editedMessage = await this.chatService.editMessage(
+        BigInt(data.contactId),
+        data.messageId,
+        user.id,
+        data.content,
+      );
+
+      await this.emitToParticipants(contact, 'message_edited', {
+        contactId: data.contactId,
+        message: editedMessage,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      client.emit('error_message', { message });
+    }
+  }
+
+  @SubscribeMessage('delete_message')
+  async handleDeleteMessage(
+    @MessageBody() data: DeleteMessageDto,
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    try {
+      const user = client.user;
+      if (!user) {
+        throw new UnauthorizedException('Unauthorized');
+      }
+
+      const contactResp = await this.contactService.findOne(data.contactId);
+      const contact = contactResp?.data;
+      if (!contact) {
+        throw new NotFoundException('Chat/contact not found');
+      }
+
+      const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
+      if (!isParticipant) {
+        throw new ForbiddenException('You are not a participant of this chat.');
+      }
+
+      await this.chatService.deleteMessage(BigInt(data.contactId), data.messageId, user.id);
+
+      await this.emitToParticipants(contact, 'message_deleted', {
+        contactId: data.contactId,
+        messageId: data.messageId,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      client.emit('error_message', { message });
+    }
+  }
+
   async reciverMessage(
     contactId: bigint,
     receiverId: bigint,
