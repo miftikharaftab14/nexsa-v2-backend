@@ -189,9 +189,20 @@ Payload:
 ```json
 {
   "contactId": 123,
-  "message": {}
+  "message": {
+    "id": 987,
+    "content": "Updated text",
+    "isEdited": true,
+    "editedAt": "2026-05-01T18:00:00.000Z"
+  }
 }
 ```
+
+Message entity now includes:
+- `isEdited: boolean`
+- `editedAt: string | null`
+
+This is available in normal message payloads as well (chat list/conversation/socket message object).
 
 ---
 

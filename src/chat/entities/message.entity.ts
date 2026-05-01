@@ -71,4 +71,10 @@ export class Message {
 
   @Column({ default: false })
   read: boolean;
+
+  @Column({ name: 'is_edited', type: 'boolean', default: false })
+  isEdited: boolean;
+
+  @Column({ name: 'edited_at', type: 'timestamp', nullable: true })
+  editedAt?: Date;
 }

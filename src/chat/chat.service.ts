@@ -112,6 +112,8 @@ export class ChatService {
     }
 
     message.content = content.trim();
+    message.isEdited = true;
+    message.editedAt = new Date();
     return this.messageRepository.save(message);
   }
 
