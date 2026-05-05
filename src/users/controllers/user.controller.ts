@@ -52,6 +52,7 @@ import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { CurrentUserType } from 'src/common/types/current-user.interface';
 import { UpdateUserFlagsDto } from '../dto/UpdateUserFlags.dto';
 import { UpdateInviteLinkDto } from '../dto/update-invite-link.dto';
+import { UpdateExplainerFlagDto } from '../dto/update-explainer-flag.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -187,6 +188,27 @@ export class UserController {
       message: Messages.USER_UPDATED,
       status: HttpStatus.OK,
       data: { ...user, inviteUrl },
+    };
+  }
+
+  @Patch('explainer-flag')
+  @ApiOperation({ summary: 'Mark customer/seller explainer as seen for current user' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Explainer flag updated successfully',
+  })
+  async updateExplainerFlag(
+    @CurrentUser() currentUser: CurrentUserType,
+    @Body() payload: UpdateExplainerFlagDto,
+  ): Promise<CustomApiResponse<User & { inviteUrl: string | null } | null>> {
+    const user = await this.userService.updateExplainerFlag(currentUser.userId, payload.type);
+    const inviteUrl = this.userService.getInviteUrl(user);
+
+    return {
+      success: true,
+      message: Messages.USER_UPDATED,
+      status: HttpStatus.OK,
+      data: user ? { ...(user as User), inviteUrl } : null,
     };
   }
 

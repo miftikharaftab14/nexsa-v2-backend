@@ -439,6 +439,19 @@ export class UserService {
     return `${baseUrl.replace(/\/+$/, '')}/${user.invite_url}`;
   }
 
+  async updateExplainerFlag(
+    userId: bigint,
+    type: 'customer' | 'seller',
+  ): Promise<User | null> {
+    if (type === 'customer') {
+      await this.userRepo.update(userId.toString(), { customerExplainer: true });
+    } else if (type === 'seller') {
+      await this.userRepo.update(userId.toString(), { sellerExplainer: true });
+    }
+
+    return this.findOne(userId);
+  }
+
   /**
    * Returns full invite link for a seller using existing invite_url.
    * Does NOT auto-generate any path; seller must set invite_url explicitly.

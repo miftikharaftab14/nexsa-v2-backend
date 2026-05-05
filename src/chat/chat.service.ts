@@ -9,7 +9,17 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, FindOptionsWhere, LessThan, MoreThan, Repository, UpdateResult } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  FindOptionsWhere,
+  In,
+  LessThan,
+  MoreThan,
+  Not,
+  Repository,
+  UpdateResult,
+} from 'typeorm';
 import { Message, MessageType } from './entities/message.entity';
 import { User } from '../users/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
@@ -31,6 +41,7 @@ import {
 } from 'src/common/types/chat';
 import { BulkDeleteDto, DeleteType } from './dto/deleteBulkDto.dto';
 import { DeletedChat } from './entities/deleted-chat.entity';
+import { DeletedMessage } from './entities/deleted-message.entity';
 import { BlocksService } from 'src/blocks/blocks.service';
 import { NotificationService } from 'src/common/services/notification.service';
 import { UserDeviceTokenService } from 'src/users/services/user-device-token.service';
@@ -57,6 +68,8 @@ export class ChatService {
     private readonly dataSource: DataSource,
     @InjectRepository(DeletedChat)
     private readonly deleteChatRepository: Repository<DeletedChat>,
+    @InjectRepository(DeletedMessage)
+    private readonly deletedMessageRepository: Repository<DeletedMessage>,
     private readonly blocksService: BlocksService,
     private readonly notificationService: NotificationService,
     private readonly userDeviceTokenService: UserDeviceTokenService,
@@ -93,6 +106,36 @@ export class ChatService {
     return this.messageRepository.save(newMessage);
   }
 
+  private async getDeletedMessageIdsByUser(
+    userId: bigint,
+    contactId?: bigint,
+  ): Promise<number[]> {
+    const qb = this.deletedMessageRepository
+      .createQueryBuilder('deleted_message')
+      .leftJoin('deleted_message.message', 'message')
+      .where('deleted_message.user_id = :userId', { userId: userId.toString() })
+      .select('deleted_message.message_id', 'messageId');
+
+    if (contactId) {
+      qb.andWhere('message.contact_id = :contactId', { contactId: contactId.toString() });
+    }
+
+    const rows = await qb.getRawMany<{ messageId: string }>();
+    return rows.map(row => Number(row.messageId));
+  }
+
+  private async applyMessageVisibilityFilter(
+    whereCondition: FindOptionsWhere<Message>,
+    userId: bigint,
+    contactId?: bigint,
+  ): Promise<FindOptionsWhere<Message>> {
+    const deletedMessageIds = await this.getDeletedMessageIdsByUser(userId, contactId);
+    if (deletedMessageIds.length > 0) {
+      whereCondition.id = Not(In(deletedMessageIds));
+    }
+    return whereCondition;
+  }
+
   async editMessage(
     contactId: bigint,
     messageId: number,
@@ -117,7 +160,29 @@ export class ChatService {
     return this.messageRepository.save(message);
   }
 
-  async deleteMessage(contactId: bigint, messageId: number, requesterId: bigint): Promise<void> {
+  async deleteMessageForUser(contactId: bigint, messageId: number, userId: bigint): Promise<void> {
+    const message = await this.messageRepository.findOne({
+      where: { id: messageId, contactId },
+    });
+
+    if (!message) {
+      throw new NotFoundException('Message not found');
+    }
+
+    const existingDeletedMessage = await this.deletedMessageRepository.findOne({
+      where: { userId: userId.toString(), messageId },
+    });
+    if (existingDeletedMessage) {
+      return;
+    }
+
+    await this.deletedMessageRepository.save({
+      userId: userId.toString(),
+      messageId,
+    });
+  }
+
+  async unsendMessage(contactId: bigint, messageId: number, requesterId: bigint): Promise<void> {
     const message = await this.messageRepository.findOne({
       where: { id: messageId, contactId },
     });
@@ -127,10 +192,10 @@ export class ChatService {
     }
 
     if (message.senderId !== requesterId) {
-      throw new UnauthorizedException('Only sender can delete this message');
+      throw new UnauthorizedException('Only sender can unsend this message');
     }
 
-    await this.messageRepository.softDelete({ id: messageId, contactId });
+    await this.messageRepository.delete({ id: messageId, contactId });
   }
 
   getCreatedAtCondition(lastDelete?: { createdAt?: Date }, blockSince?: Date) {
@@ -173,8 +238,25 @@ export class ChatService {
       relations: ['sender'],
       order: { createdAt: 'ASC' },
     });
+    const deletedMessageIds = new Set(await this.getDeletedMessageIdsByUser(userId, contactId));
+    const transformedMessages = await this.convertUrls(messages);
 
-    return this.convertUrls(messages);
+    return transformedMessages.map(msg => {
+      if (!deletedMessageIds.has(msg.id)) {
+        return msg;
+      }
+
+      return {
+        ...msg,
+        content: 'This message was removed',
+        mediaKey: null,
+        mediaCont: {
+          mediaUrl: null,
+          thumbnailUrl: null,
+        },
+        isDeletedForUser: true,
+      };
+    });
   }
 
   async createBroadcast({
@@ -447,6 +529,11 @@ export class ChatService {
         unreadWhere.createdAt = createdAtCondition;
         lastMessageWhere.createdAt = createdAtCondition;
       }
+
+      await this.applyMessageVisibilityFilter(messageWhere, userId, contact.id);
+      await this.applyMessageVisibilityFilter(unreadWhere, userId, contact.id);
+      await this.applyMessageVisibilityFilter(lastMessageWhere, userId, contact.id);
+
       const messageCount = await this.messageRepository.count({ where: messageWhere });
       if (messageCount === 0) continue;
 
@@ -575,6 +662,10 @@ export class ChatService {
         unreadWhere.createdAt = createdAtCondition;
         lastMessageWhere.createdAt = createdAtCondition;
       }
+
+      await this.applyMessageVisibilityFilter(messageWhere, userId, contact.id);
+      await this.applyMessageVisibilityFilter(unreadWhere, userId, contact.id);
+      await this.applyMessageVisibilityFilter(lastMessageWhere, userId, contact.id);
 
       const messageCount = await this.messageRepository.count({ where: messageWhere });
       if (messageCount === 0) continue;

@@ -35,6 +35,7 @@ import { File } from 'src/files/entities/file.entity';
 import { ProductChatInitiateDto } from './dto/product-chat-initiate.dto';
 import { EditMessageDto } from './dto/edit-message.dto';
 import { DeleteMessageDto } from './dto/delete-message.dto';
+import { UnsendMessageDto } from './dto/unsend-message.dto';
 import { GalleryImagesService } from 'src/gallery-image/gallery-images.service';
 import { ChatResult, ChatType, TransformedBroadcast } from 'src/common/types/chat';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -447,9 +448,44 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         throw new ForbiddenException('You are not a participant of this chat.');
       }
 
-      await this.chatService.deleteMessage(BigInt(data.contactId), data.messageId, user.id);
+      await this.chatService.deleteMessageForUser(BigInt(data.contactId), data.messageId, user.id);
 
-      await this.emitToParticipants(contact, 'message_deleted', {
+      client.emit('message_deleted', {
+        contactId: data.contactId,
+        messageId: data.messageId,
+        userId: user.id,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      client.emit('error_message', { message });
+    }
+  }
+
+  @SubscribeMessage('unsend_message')
+  async handleUnsendMessage(
+    @MessageBody() data: UnsendMessageDto,
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    try {
+      const user = client.user;
+      if (!user) {
+        throw new UnauthorizedException('Unauthorized');
+      }
+
+      const contactResp = await this.contactService.findOne(data.contactId);
+      const contact = contactResp?.data;
+      if (!contact) {
+        throw new NotFoundException('Chat/contact not found');
+      }
+
+      const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
+      if (!isParticipant) {
+        throw new ForbiddenException('You are not a participant of this chat.');
+      }
+
+      await this.chatService.unsendMessage(BigInt(data.contactId), data.messageId, user.id);
+
+      await this.emitToParticipants(contact, 'message_unsent', {
         contactId: data.contactId,
         messageId: data.messageId,
       });

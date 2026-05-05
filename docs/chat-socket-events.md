@@ -105,7 +105,7 @@ Rules:
 
 ### `delete_message` (new)
 
-Delete/unsend a message (soft delete on backend).
+Delete a message for current user only (hide in that user's chat view).
 
 Payload:
 
@@ -118,7 +118,28 @@ Payload:
 
 Rules:
 - Only chat participants can call this event.
-- Only original sender can delete the message.
+- Message stays visible for the other participant(s).
+- For the deleting user, the message is now represented as a removed placeholder (`content: "This message was removed"` and `isDeletedForUser: true`) instead of being omitted from conversation payloads.
+
+---
+
+### `unsend_message` (new)
+
+Unsend a message for everyone (hard delete from DB).
+
+Payload:
+
+```json
+{
+  "contactId": 123,
+  "messageId": 987
+}
+```
+
+Rules:
+- Only chat participants can call this event.
+- Only original sender can unsend the message.
+- Message is removed permanently from DB.
 
 ---
 
@@ -204,11 +225,33 @@ Message entity now includes:
 
 This is available in normal message payloads as well (chat list/conversation/socket message object).
 
+Delete visibility behavior:
+- `delete_message` stores a user-message delete record.
+- Conversation payload for that user keeps the message position but marks it as removed (`isDeletedForUser: true` and placeholder content).
+- Other users still receive the message normally.
+- `unsend_message` removes the message row from DB, so nobody sees it anymore.
+
 ---
 
 ### `message_deleted` (new)
 
-Broadcast to chat participants when a message is deleted.
+Sent back to requester when message is deleted for that user only.
+
+Payload:
+
+```json
+{
+  "contactId": 123,
+  "messageId": 987,
+  "userId": 456
+}
+```
+
+---
+
+### `message_unsent` (new)
+
+Broadcast to chat participants when a message is unsent (hard deleted).
 
 Payload:
 

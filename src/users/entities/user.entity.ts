@@ -64,6 +64,12 @@ export class User {
   @Column({ default: true })
   notification: boolean;
 
+  @Column({ name: 'seller_explainer', type: 'boolean', default: false })
+  sellerExplainer: boolean;
+
+  @Column({ name: 'customer_explainer', type: 'boolean', default: false })
+  customerExplainer: boolean;
+
   @OneToMany(() => UserDeviceToken, token => token.user)
   deviceTokens: UserDeviceToken[];
 

@@ -13,6 +13,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { Contact } from 'src/contacts/entities/contact.entity';
 import { FilesModule } from 'src/files/files.module';
 import { DeletedChat } from './entities/deleted-chat.entity';
+import { DeletedMessage } from './entities/deleted-message.entity';
 import { GalleryImagesModule } from 'src/gallery-image/gallery-images.module';
 import { BlocksModule } from 'src/blocks/blocks.module';
 import { NotificationModule } from 'src/common/modules/Notification.module';
@@ -20,7 +21,7 @@ import { UserDeviceTokenModule } from 'src/users/user-device-token.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Message, Broadcast, BroadcastRecipient, Contact, DeletedChat]),
+    TypeOrmModule.forFeature([Message, Broadcast, BroadcastRecipient, Contact, DeletedChat, DeletedMessage]),
     UserModule,
     ContactsModule,
     AuthModule,
