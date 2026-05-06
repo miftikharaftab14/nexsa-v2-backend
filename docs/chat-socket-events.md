@@ -97,6 +97,16 @@ Payload:
 }
 ```
 
+Broadcast-compatible payload (when operating from broadcast context):
+
+```json
+{
+  "broadcastId": 7,
+  "messageId": 987,
+  "content": "Updated text"
+}
+```
+
 Rules:
 - Only chat participants can call this event.
 - Only original sender can edit the message.
@@ -112,6 +122,15 @@ Payload:
 ```json
 {
   "contactId": 123,
+  "messageId": 987
+}
+```
+
+Broadcast-compatible payload:
+
+```json
+{
+  "broadcastId": 7,
   "messageId": 987
 }
 ```
@@ -132,6 +151,15 @@ Payload:
 ```json
 {
   "contactId": 123,
+  "messageId": 987
+}
+```
+
+Broadcast-compatible payload:
+
+```json
+{
+  "broadcastId": 7,
   "messageId": 987
 }
 ```
@@ -210,6 +238,7 @@ Payload:
 ```json
 {
   "contactId": 123,
+  "broadcastId": 7,
   "message": {
     "id": 987,
     "content": "Updated text",
@@ -242,6 +271,7 @@ Payload:
 ```json
 {
   "contactId": 123,
+  "broadcastId": 7,
   "messageId": 987,
   "userId": 456
 }
@@ -258,6 +288,7 @@ Payload:
 ```json
 {
   "contactId": 123,
+  "broadcastId": 7,
   "messageId": 987
 }
 ```

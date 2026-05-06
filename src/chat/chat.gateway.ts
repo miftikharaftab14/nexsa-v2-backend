@@ -189,6 +189,45 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
   }
 
+  private async resolveContactForMessageAction(data: {
+    contactId?: number;
+    broadcastId?: number;
+    messageId: number;
+  }) {
+    const message = await this.messageRepository.findOne({
+      where: { id: data.messageId },
+    });
+
+    if (!message) {
+      throw new NotFoundException('Message not found');
+    }
+
+    if (typeof data.contactId === 'number' && BigInt(data.contactId) !== message.contactId) {
+      throw new BadRequestException('Message does not belong to the provided contactId');
+    }
+
+    if (
+      typeof data.broadcastId === 'number' &&
+      Number(message.broadcastId ?? 0) !== data.broadcastId
+    ) {
+      throw new BadRequestException('Message does not belong to the provided broadcastId');
+    }
+
+    const resolvedContactId = Number(message.contactId);
+    const contactResp = await this.contactService.findOne(resolvedContactId);
+    const contact = contactResp?.data;
+
+    if (!contact) {
+      throw new NotFoundException('Chat/contact not found');
+    }
+
+    return {
+      contact,
+      resolvedContactId,
+      resolvedBroadcastId: message.broadcastId ?? undefined,
+    };
+  }
+
   @SubscribeMessage('send_message')
   async handleSendMessage(
     @MessageBody() data: SendMessageDto,
@@ -398,11 +437,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         throw new UnauthorizedException('Unauthorized');
       }
 
-      const contactResp = await this.contactService.findOne(data.contactId);
-      const contact = contactResp?.data;
-      if (!contact) {
-        throw new NotFoundException('Chat/contact not found');
-      }
+      const { contact, resolvedContactId, resolvedBroadcastId } =
+        await this.resolveContactForMessageAction(data);
 
       const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
       if (!isParticipant) {
@@ -410,14 +446,15 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       }
 
       const editedMessage = await this.chatService.editMessage(
-        BigInt(data.contactId),
+        BigInt(resolvedContactId),
         data.messageId,
         user.id,
         data.content,
       );
 
       await this.emitToParticipants(contact, 'message_edited', {
-        contactId: data.contactId,
+        contactId: resolvedContactId,
+        broadcastId: resolvedBroadcastId,
         message: editedMessage,
       });
     } catch (error: unknown) {
@@ -437,21 +474,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         throw new UnauthorizedException('Unauthorized');
       }
 
-      const contactResp = await this.contactService.findOne(data.contactId);
-      const contact = contactResp?.data;
-      if (!contact) {
-        throw new NotFoundException('Chat/contact not found');
-      }
+      const { contact, resolvedContactId, resolvedBroadcastId } =
+        await this.resolveContactForMessageAction(data);
 
       const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
       if (!isParticipant) {
         throw new ForbiddenException('You are not a participant of this chat.');
       }
 
-      await this.chatService.deleteMessageForUser(BigInt(data.contactId), data.messageId, user.id);
+      await this.chatService.deleteMessageForUser(BigInt(resolvedContactId), data.messageId, user.id);
 
       client.emit('message_deleted', {
-        contactId: data.contactId,
+        contactId: resolvedContactId,
+        broadcastId: resolvedBroadcastId,
         messageId: data.messageId,
         userId: user.id,
       });
@@ -472,21 +507,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         throw new UnauthorizedException('Unauthorized');
       }
 
-      const contactResp = await this.contactService.findOne(data.contactId);
-      const contact = contactResp?.data;
-      if (!contact) {
-        throw new NotFoundException('Chat/contact not found');
-      }
+      const { contact, resolvedContactId, resolvedBroadcastId } =
+        await this.resolveContactForMessageAction(data);
 
       const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
       if (!isParticipant) {
         throw new ForbiddenException('You are not a participant of this chat.');
       }
 
-      await this.chatService.unsendMessage(BigInt(data.contactId), data.messageId, user.id);
+      await this.chatService.unsendMessage(BigInt(resolvedContactId), data.messageId, user.id);
 
       await this.emitToParticipants(contact, 'message_unsent', {
-        contactId: data.contactId,
+        contactId: resolvedContactId,
+        broadcastId: resolvedBroadcastId,
         messageId: data.messageId,
       });
     } catch (error: unknown) {

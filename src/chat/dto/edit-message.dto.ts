@@ -1,8 +1,13 @@
-import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class EditMessageDto {
+  @IsOptional()
   @IsNumber()
-  contactId: number;
+  contactId?: number;
+
+  @IsOptional()
+  @IsNumber()
+  broadcastId?: number;
 
   @IsNumber()
   messageId: number;
