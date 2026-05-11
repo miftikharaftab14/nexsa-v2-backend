@@ -14,6 +14,7 @@ import {
   DataSource,
   FindOptionsWhere,
   In,
+  IsNull,
   LessThan,
   MoreThan,
   Not,
@@ -136,66 +137,121 @@ export class ChatService {
     return whereCondition;
   }
 
-  async editMessage(
-    contactId: bigint,
-    messageId: number,
-    editorId: bigint,
-    content: string,
-  ): Promise<Message> {
-    const message = await this.messageRepository.findOne({
-      where: { id: messageId, contactId },
-    });
-
-    if (!message) {
-      throw new NotFoundException('Message not found');
+  /**
+   * Find all sibling messages of a broadcast send. A "send" via socket or HTTP creates
+   * one message row per recipient contact (and per uploaded media file). Sibling messages
+   * share the same `broadcastId`, sender, message type and media key and are created in
+   * a tight time window. We include a +/- 60s window to safely disambiguate multiple
+   * sends to the same broadcast group.
+   *
+   * For non-broadcast messages, the returned array contains only the input message.
+   */
+  async findBroadcastSiblings(message: Message): Promise<Message[]> {
+    if (!message.broadcastId) {
+      return [message];
     }
 
-    if (message.senderId !== editorId) {
+    const windowMs = 60 * 1000;
+    const windowStart = new Date(message.createdAt.getTime() - windowMs);
+    const windowEnd = new Date(message.createdAt.getTime() + windowMs);
+
+    const where: FindOptionsWhere<Message> = {
+      broadcastId: message.broadcastId,
+      senderId: message.senderId,
+      messageType: message.messageType,
+      createdAt: Between(windowStart, windowEnd),
+      mediaKey: message.mediaKey == null ? IsNull() : message.mediaKey,
+    };
+
+    const siblings = await this.messageRepository.find({ where });
+
+    if (siblings.length === 0) {
+      return [message];
+    }
+
+    return siblings;
+  }
+
+  /**
+   * Edit a message. If the message is part of a broadcast, all sibling messages
+   * (one per recipient contact) are updated together so every recipient sees the edit.
+   */
+  async editMessage(
+    targetMessage: Message,
+    editorId: bigint,
+    content: string,
+  ): Promise<Message[]> {
+    if (targetMessage.senderId !== editorId) {
       throw new UnauthorizedException('Only sender can edit this message');
     }
 
-    message.content = content.trim();
-    message.isEdited = true;
-    message.editedAt = new Date();
-    return this.messageRepository.save(message);
+    const siblings = await this.findBroadcastSiblings(targetMessage);
+    const trimmed = content.trim();
+    const editedAt = new Date();
+
+    for (const sibling of siblings) {
+      sibling.content = trimmed;
+      sibling.isEdited = true;
+      sibling.editedAt = editedAt;
+    }
+
+    return this.messageRepository.save(siblings);
   }
 
-  async deleteMessageForUser(contactId: bigint, messageId: number, userId: bigint): Promise<void> {
-    const message = await this.messageRepository.findOne({
-      where: { id: messageId, contactId },
-    });
+  /**
+   * Mark a message as deleted-for-user. If the message is part of a broadcast,
+   * every sibling message is also marked as deleted-for-user so the requester's
+   * view is consistent across all recipient chats. Returns the list of affected
+   * sibling messages so the caller can emit per-contact events.
+   */
+  async deleteMessageForUser(
+    targetMessage: Message,
+    userId: bigint,
+  ): Promise<Message[]> {
+    const siblings = await this.findBroadcastSiblings(targetMessage);
+    const siblingIds = siblings.map(s => s.id);
 
-    if (!message) {
-      throw new NotFoundException('Message not found');
+    const existing = await this.deletedMessageRepository.find({
+      where: {
+        userId: userId.toString(),
+        messageId: In(siblingIds),
+      },
+    });
+    const existingIds = new Set(existing.map(e => e.messageId));
+
+    const toCreate = siblingIds
+      .filter(id => !existingIds.has(id))
+      .map(id => ({ userId: userId.toString(), messageId: id }));
+
+    if (toCreate.length > 0) {
+      await this.deletedMessageRepository.save(toCreate);
     }
 
-    const existingDeletedMessage = await this.deletedMessageRepository.findOne({
-      where: { userId: userId.toString(), messageId },
-    });
-    if (existingDeletedMessage) {
-      return;
-    }
-
-    await this.deletedMessageRepository.save({
-      userId: userId.toString(),
-      messageId,
-    });
+    return siblings;
   }
 
-  async unsendMessage(contactId: bigint, messageId: number, requesterId: bigint): Promise<void> {
-    const message = await this.messageRepository.findOne({
-      where: { id: messageId, contactId },
-    });
-
-    if (!message) {
-      throw new NotFoundException('Message not found');
-    }
-
-    if (message.senderId !== requesterId) {
+  /**
+   * Hard delete a message. If the message is part of a broadcast, every sibling
+   * message is removed so the message disappears for all recipients of the broadcast.
+   * Returns the list of affected sibling messages (with their original `contactId`
+   * and `broadcastId`) so the caller can emit per-contact events before/after delete.
+   */
+  async unsendMessage(
+    targetMessage: Message,
+    requesterId: bigint,
+  ): Promise<Message[]> {
+    if (targetMessage.senderId !== requesterId) {
       throw new UnauthorizedException('Only sender can unsend this message');
     }
 
-    await this.messageRepository.delete({ id: messageId, contactId });
+    const siblings = await this.findBroadcastSiblings(targetMessage);
+    const siblingIds = siblings.map(s => s.id);
+
+    if (siblingIds.length > 0) {
+      await this.messageRepository.delete({ id: In(siblingIds) });
+    }
+
+    return siblings;
   }
 
   getCreatedAtCondition(lastDelete?: { createdAt?: Date }, blockSince?: Date) {

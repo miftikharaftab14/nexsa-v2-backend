@@ -110,6 +110,7 @@ Broadcast-compatible payload (when operating from broadcast context):
 Rules:
 - Only chat participants can call this event.
 - Only original sender can edit the message.
+- **Broadcast fanout:** when `broadcastId` is provided (or the resolved message is a broadcast message), every sibling message of the same broadcast send (one row per recipient contact, plus per uploaded media file) is updated together. A separate `message_edited` event is emitted for each affected chat so every recipient and the sender's chat views are kept in sync.
 
 ---
 
@@ -139,6 +140,7 @@ Rules:
 - Only chat participants can call this event.
 - Message stays visible for the other participant(s).
 - For the deleting user, the message is now represented as a removed placeholder (`content: "This message was removed"` and `isDeletedForUser: true`) instead of being omitted from conversation payloads.
+- **Broadcast fanout:** when `broadcastId` is provided, only the broadcast sender may call this event. The action marks every sibling message (one per recipient contact) as deleted-for-user so the sender's view of the broadcast message is cleared from all of their recipient chats. A separate `message_deleted` event is emitted back to the requester for each affected chat. Recipients who want to delete the message in their own chat should use the per-chat `contactId` form.
 
 ---
 
@@ -168,6 +170,7 @@ Rules:
 - Only chat participants can call this event.
 - Only original sender can unsend the message.
 - Message is removed permanently from DB.
+- **Broadcast fanout:** when `broadcastId` is provided (or the resolved message is a broadcast message), every sibling message of the same broadcast send is hard-deleted. A separate `message_unsent` event is emitted to the participants of each affected chat so the message disappears for all recipients.
 
 ---
 
@@ -248,6 +251,10 @@ Payload:
 }
 ```
 
+Notes:
+- `broadcastId` is `null` for one-to-one messages.
+- For broadcast edits the server emits this event **once per recipient chat** (each with that chat's `contactId` and the sibling `message`). Clients should treat each event independently when updating chat views.
+
 Message entity now includes:
 - `isEdited: boolean`
 - `editedAt: string | null`
@@ -277,6 +284,10 @@ Payload:
 }
 ```
 
+Notes:
+- `broadcastId` is `null` for one-to-one messages.
+- For broadcast deletes the server emits this event **once per recipient chat** to the requester (each with that chat's `contactId` and the sibling `messageId`).
+
 ---
 
 ### `message_unsent` (new)
@@ -292,6 +303,10 @@ Payload:
   "messageId": 987
 }
 ```
+
+Notes:
+- `broadcastId` is `null` for one-to-one messages.
+- For broadcast unsends the server emits this event **once per recipient chat** to the participants of that chat (each with that chat's `contactId` and the sibling `messageId`).
 
 ---
 

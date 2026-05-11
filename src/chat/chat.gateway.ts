@@ -189,11 +189,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
   }
 
-  private async resolveContactForMessageAction(data: {
+  private async resolveMessageForAction(data: {
     contactId?: number;
     broadcastId?: number;
     messageId: number;
-  }) {
+  }): Promise<Message> {
     const message = await this.messageRepository.findOne({
       where: { id: data.messageId },
     });
@@ -213,19 +213,42 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       throw new BadRequestException('Message does not belong to the provided broadcastId');
     }
 
-    const resolvedContactId = Number(message.contactId);
-    const contactResp = await this.contactService.findOne(resolvedContactId);
+    return message;
+  }
+
+  private async getContactForMessage(message: Message): Promise<Contact> {
+    const contactResp = await this.contactService.findOne(Number(message.contactId));
     const contact = contactResp?.data;
 
     if (!contact) {
       throw new NotFoundException('Chat/contact not found');
     }
 
-    return {
-      contact,
-      resolvedContactId,
-      resolvedBroadcastId: message.broadcastId ?? undefined,
-    };
+    return contact;
+  }
+
+  /**
+   * Emits a chat-message event for each affected message. For one-to-one chats this
+   * results in a single emit; for broadcast messages it emits one event per sibling
+   * (one per recipient contact) so every chat view is kept in sync.
+   */
+  private async emitMessagesToParticipants(
+    messages: Message[],
+    event: string,
+    buildPayload: (message: Message, contact: Contact) => Record<string, unknown>,
+  ) {
+    for (const message of messages) {
+      try {
+        const contact = await this.getContactForMessage(message);
+        await this.emitToParticipants(contact, event, buildPayload(message, contact));
+      } catch (err) {
+        this.logger.warn(
+          `Failed to emit ${event} for message ${message.id} on contact ${message.contactId}: ${
+            err instanceof Error ? err.message : 'unknown error'
+          }`,
+        );
+      }
+    }
   }
 
   @SubscribeMessage('send_message')
@@ -437,26 +460,34 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         throw new UnauthorizedException('Unauthorized');
       }
 
-      const { contact, resolvedContactId, resolvedBroadcastId } =
-        await this.resolveContactForMessageAction(data);
+      const targetMessage = await this.resolveMessageForAction(data);
 
-      const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
-      if (!isParticipant) {
-        throw new ForbiddenException('You are not a participant of this chat.');
+      if (targetMessage.broadcastId) {
+        // Broadcast edits are sender-only. The service also enforces this, but reject
+        // early here so non-senders never reach the multi-chat fanout path.
+        if (targetMessage.senderId !== user.id) {
+          throw new ForbiddenException('Only the broadcast sender can edit this message.');
+        }
+      } else {
+        const contact = await this.getContactForMessage(targetMessage);
+        const isParticipant =
+          user.id === contact.seller_id || user.id === contact.invited_user_id;
+        if (!isParticipant) {
+          throw new ForbiddenException('You are not a participant of this chat.');
+        }
       }
 
-      const editedMessage = await this.chatService.editMessage(
-        BigInt(resolvedContactId),
-        data.messageId,
+      const editedMessages = await this.chatService.editMessage(
+        targetMessage,
         user.id,
         data.content,
       );
 
-      await this.emitToParticipants(contact, 'message_edited', {
-        contactId: resolvedContactId,
-        broadcastId: resolvedBroadcastId,
-        message: editedMessage,
-      });
+      await this.emitMessagesToParticipants(editedMessages, 'message_edited', message => ({
+        contactId: Number(message.contactId),
+        broadcastId: message.broadcastId ?? null,
+        message,
+      }));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
       client.emit('error_message', { message });
@@ -474,22 +505,42 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         throw new UnauthorizedException('Unauthorized');
       }
 
-      const { contact, resolvedContactId, resolvedBroadcastId } =
-        await this.resolveContactForMessageAction(data);
+      const targetMessage = await this.resolveMessageForAction(data);
 
-      const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
-      if (!isParticipant) {
-        throw new ForbiddenException('You are not a participant of this chat.');
+      if (targetMessage.broadcastId) {
+        // Broadcast delete-for-self is only meaningful for the sender (they need to
+        // clear the message from every chat view). Recipients should use the per-chat
+        // `contactId` path instead.
+        if (targetMessage.senderId !== user.id) {
+          throw new ForbiddenException(
+            'Only the broadcast sender can delete a broadcast message. Use contactId to delete in your chat.',
+          );
+        }
+      } else {
+        const contact = await this.getContactForMessage(targetMessage);
+        const isParticipant =
+          user.id === contact.seller_id || user.id === contact.invited_user_id;
+        if (!isParticipant) {
+          throw new ForbiddenException('You are not a participant of this chat.');
+        }
       }
 
-      await this.chatService.deleteMessageForUser(BigInt(resolvedContactId), data.messageId, user.id);
+      const affectedMessages = await this.chatService.deleteMessageForUser(
+        targetMessage,
+        user.id,
+      );
 
-      client.emit('message_deleted', {
-        contactId: resolvedContactId,
-        broadcastId: resolvedBroadcastId,
-        messageId: data.messageId,
-        userId: user.id,
-      });
+      // `message_deleted` is sent only to the requester since it's a per-user hide.
+      // For broadcast, emit one event per affected chat so the requester can clear
+      // every chat view.
+      for (const message of affectedMessages) {
+        client.emit('message_deleted', {
+          contactId: Number(message.contactId),
+          broadcastId: message.broadcastId ?? null,
+          messageId: message.id,
+          userId: user.id,
+        });
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
       client.emit('error_message', { message });
@@ -507,21 +558,29 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         throw new UnauthorizedException('Unauthorized');
       }
 
-      const { contact, resolvedContactId, resolvedBroadcastId } =
-        await this.resolveContactForMessageAction(data);
+      const targetMessage = await this.resolveMessageForAction(data);
 
-      const isParticipant = user.id === contact.seller_id || user.id === contact.invited_user_id;
-      if (!isParticipant) {
-        throw new ForbiddenException('You are not a participant of this chat.');
+      if (targetMessage.broadcastId) {
+        if (targetMessage.senderId !== user.id) {
+          throw new ForbiddenException('Only the broadcast sender can unsend this message.');
+        }
+      } else {
+        const contact = await this.getContactForMessage(targetMessage);
+        const isParticipant =
+          user.id === contact.seller_id || user.id === contact.invited_user_id;
+        if (!isParticipant) {
+          throw new ForbiddenException('You are not a participant of this chat.');
+        }
       }
 
-      await this.chatService.unsendMessage(BigInt(resolvedContactId), data.messageId, user.id);
+      // Capture sibling info before delete so we can emit per-chat events afterwards.
+      const affectedMessages = await this.chatService.unsendMessage(targetMessage, user.id);
 
-      await this.emitToParticipants(contact, 'message_unsent', {
-        contactId: resolvedContactId,
-        broadcastId: resolvedBroadcastId,
-        messageId: data.messageId,
-      });
+      await this.emitMessagesToParticipants(affectedMessages, 'message_unsent', message => ({
+        contactId: Number(message.contactId),
+        broadcastId: message.broadcastId ?? null,
+        messageId: message.id,
+      }));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
       client.emit('error_message', { message });
