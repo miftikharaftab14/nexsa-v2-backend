@@ -9,8 +9,8 @@ WORKDIR /usr/src/app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
+# pnpm-workspace.yaml: allowBuilds (pnpm v10+ strictDepBuilds)
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
 
 # Install dependencies with frozen lockfile
 RUN pnpm install --frozen-lockfile
@@ -49,6 +49,7 @@ RUN addgroup -g 1001 -S nodejs && \
 # Copy package files and full node_modules (keep dev deps for Nest CLI)
 COPY --from=deps /usr/src/app/package.json ./package.json
 COPY --from=deps /usr/src/app/pnpm-lock.yaml* ./
+COPY --from=deps /usr/src/app/pnpm-workspace.yaml ./
 COPY --from=deps /usr/src/app/node_modules ./node_modules
 
 # Copy built application

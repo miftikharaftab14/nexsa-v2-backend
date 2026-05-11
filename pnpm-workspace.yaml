@@ -1,0 +1,12 @@
+# Required for pnpm v10+ (strictDepBuilds): allow native/postinstall scripts for these deps.
+# See https://pnpm.io/cli/approve-builds
+packages:
+  - '.'
+
+allowBuilds:
+  '@firebase/util': true
+  '@nestjs/core': true
+  '@scarf/scarf': true
+  '@swc/core': true
+  protobufjs: true
+  sharp: true
